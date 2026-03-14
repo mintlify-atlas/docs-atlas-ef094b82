@@ -1,0 +1,177 @@
+---
+title: 'API Overview'
+description: 'Overview of the Vantix Sales API architecture and capabilities'
+icon: 'book'
+---
+
+## Introduction
+
+The Vantix Sales API is a RESTful web service built on ASP.NET Core that provides programmatic access to customer management and sales operations. The API follows modern REST principles and returns responses in JSON format.
+
+## Base URL
+
+The API runs on HTTPS and is accessible at:
+
+```
+https://localhost:5001/api
+```
+
+<Note>
+  In production environments, replace the base URL with your deployed API endpoint.
+</Note>
+
+## OpenAPI/Swagger Documentation
+
+The API includes built-in OpenAPI 3.0 support for interactive documentation and testing. The OpenAPI specification is available in development mode:
+
+```bash
+GET /openapi/v1.json
+```
+
+This endpoint provides the complete API schema including all endpoints, parameters, and response models.
+
+### Accessing Interactive Documentation
+
+In development environments, the API automatically exposes the OpenAPI endpoint:
+
+```csharp Program.cs
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+```
+
+## API Architecture
+
+The Vantix API follows a clean architecture pattern with distinct layers:
+
+- **API Layer** (`Vantix.Api`) - Controllers and HTTP endpoints
+- **Application Layer** (`Vantix.Application`) - Business logic and use cases
+- **Domain Layer** (`Vantix.Domain`) - Entity models and business rules
+- **Infrastructure Layer** (`Vantix.Infrastructure`) - Database context and persistence
+- **Core Layer** (`Vantix.Core`) - Shared utilities and interfaces
+
+## Response Format
+
+All API responses are returned in JSON format with appropriate HTTP status codes.
+
+### Success Response
+
+```json
+{
+  "clienteId": 1,
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "documentoIdentidad": "12345678",
+  "email": "juan.perez@example.com",
+  "telefono": "+1234567890",
+  "fechaRegistro": "2026-03-14T10:30:00Z",
+  "activo": true
+}
+```
+
+### Error Response
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "Bad Request",
+  "status": 400,
+  "errors": {
+    "nombre": ["The Nombre field is required."]
+  }
+}
+```
+
+## HTTP Status Codes
+
+The API uses standard HTTP status codes:
+
+| Status Code | Description |
+|------------|-------------|
+| `200` | OK - Request succeeded |
+| `201` | Created - Resource created successfully |
+| `204` | No Content - Request succeeded with no response body |
+| `400` | Bad Request - Invalid request parameters |
+| `401` | Unauthorized - Authentication required |
+| `403` | Forbidden - Insufficient permissions |
+| `404` | Not Found - Resource does not exist |
+| `409` | Conflict - Duplicate resource (e.g., DocumentoIdentidad) |
+| `422` | Unprocessable Entity - Validation failed |
+| `500` | Internal Server Error - Server error |
+
+## Error Handling
+
+The API implements ASP.NET Core's built-in error handling and validation. All validation errors are returned with detailed error messages in the response body.
+
+### Validation Errors
+
+When a request fails validation, the API returns a `400 Bad Request` with specific field errors:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "documentoIdentidad": ["DocumentoIdentidad must be unique"],
+    "email": ["Invalid email format"]
+  }
+}
+```
+
+## Request Headers
+
+All API requests should include the following headers:
+
+```http
+Content-Type: application/json
+Accept: application/json
+```
+
+<Warning>
+  The API enforces HTTPS redirection. All HTTP requests will be automatically redirected to HTTPS.
+</Warning>
+
+## API Versioning
+
+The current API version is **v1**. The API uses URL path versioning:
+
+```
+/api/v1/customers
+/api/v1/sales
+```
+
+## Database
+
+The API uses SQL Server as its primary database:
+
+- **Database**: VantixV1
+- **ORM**: Entity Framework Core
+- **Provider**: Microsoft.EntityFrameworkCore.SqlServer
+
+## Rate Limiting
+
+<Note>
+  Rate limiting is not currently implemented but is recommended for production deployments to prevent abuse and ensure fair usage.
+</Note>
+
+## CORS Policy
+
+<Note>
+  Cross-Origin Resource Sharing (CORS) should be configured based on your frontend application's domain requirements.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Customer Endpoints" icon="users" href="/api/endpoints/customers">
+    Explore customer management endpoints
+  </Card>
+  <Card title="Customer Model" icon="database" href="/api/models/customer">
+    View the customer data model
+  </Card>
+</CardGroup>

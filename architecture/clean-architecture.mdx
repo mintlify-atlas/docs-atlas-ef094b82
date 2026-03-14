@@ -1,0 +1,385 @@
+---
+title: 'Clean Architecture Implementation'
+description: 'Detailed explanation of how Vantix implements Clean Architecture principles'
+icon: 'layer-group'
+---
+
+## Clean Architecture Principles
+
+Clean Architecture, popularized by Robert C. Martin (Uncle Bob), organizes code into concentric layers with dependencies pointing inward. The Vantix Sales API implements this pattern to create a maintainable and testable system.
+
+## The Dependency Rule
+
+<Warning>
+  The most important rule: **Dependencies must point inward**. Inner circles must not know about outer circles.
+</Warning>
+
+In Vantix, this means:
+
+- `Vantix.Domain` has **zero dependencies** on other projects
+- `Vantix.Core` depends only on `Vantix.Domain`
+- `Vantix.Application` depends on `Vantix.Core` and `Vantix.Domain`
+- `Vantix.Infrastructure` depends on `Vantix.Domain`
+- `Vantix.Api` orchestrates everything but contains minimal logic
+
+## Layer Implementation
+
+### Domain Layer - The Core
+
+The Domain layer is the heart of the application, containing entities and domain models.
+
+<CodeGroup>
+```xml Vantix.Domain.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Entities\Models\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp Clientes.cs
+using System;
+using System.Collections.Generic;
+
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+
+    public string Nombre { get; set; } = null!;
+
+    public string Apellido { get; set; } = null!;
+
+    public string DocumentoIdentidad { get; set; } = null!;
+
+    public string? Email { get; set; }
+
+    public string? Telefono { get; set; }
+
+    public DateTime? FechaRegistro { get; set; }
+
+    public bool? Activo { get; set; }
+}
+```
+</CodeGroup>
+
+<Info>
+  **Key Characteristic**: The `Vantix.Domain` project has no project references to other Vantix projects, making it the most independent layer.
+</Info>
+
+### Core Layer - Business Logic
+
+The Core layer contains the business rules and use cases that are independent of any framework.
+
+```xml Vantix.Core.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>
+```
+
+<Note>
+  The Core layer has **no external dependencies**, ensuring business logic remains pure and framework-agnostic.
+</Note>
+
+### Application Layer - Orchestration
+
+The Application layer orchestrates the flow between the presentation and business logic layers.
+
+```xml Vantix.Application.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>
+```
+
+**Responsibilities:**
+- Define application service interfaces
+- Implement use case orchestration
+- Handle data transformation between layers
+- Coordinate business logic execution
+
+### Infrastructure Layer - External Services
+
+The Infrastructure layer handles all external dependencies like databases and third-party services.
+
+<CodeGroup>
+```xml Vantix.Infrastructure.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Persistence\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vantix.Domain\Vantix.Domain.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp VantixDbContext.cs
+using System;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+using Vantix.Domain.Entities.Models;
+
+namespace Vantix.Infrastructure.Persistence;
+
+public partial class VantixDbContext : DbContext
+{
+    public VantixDbContext()
+    {
+    }
+
+    public VantixDbContext(DbContextOptions<VantixDbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<Clientes> Clientes { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Clientes>(entity =>
+        {
+            entity.HasKey(e => e.ClienteId)
+                .HasName("PK__Clientes__71ABD0872790C1F1");
+
+            entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A")
+                .IsUnique();
+
+            entity.Property(e => e.Activo).HasDefaultValue(true);
+            entity.Property(e => e.Apellido).HasMaxLength(100);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(150);
+            entity.Property(e => e.FechaRegistro)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Nombre).HasMaxLength(100);
+            entity.Property(e => e.Telefono).HasMaxLength(20);
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+```
+</CodeGroup>
+
+<Tip>
+  Notice how `VantixDbContext` references entities from `Vantix.Domain.Entities.Models`, maintaining the dependency rule.
+</Tip>
+
+### API Layer - Presentation
+
+The API layer is the entry point for HTTP requests and depends on all other layers for orchestration.
+
+<CodeGroup>
+```xml Vantix.Api.csproj
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+```
+</CodeGroup>
+
+## Data Flow Through Layers
+
+<Steps>
+  <Step title="Request Enters API Layer">
+    An HTTP request hits a controller in `Vantix.Api`
+    
+    ```csharp
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ClientesController : ControllerBase
+    {
+        // Controller receives HTTP request
+    }
+    ```
+  </Step>
+  
+  <Step title="Controller Calls Application Service">
+    The controller delegates to an application service in `Vantix.Application`
+    
+    ```csharp
+    private readonly IClientesService _clientesService;
+    
+    public async Task<IActionResult> GetClientes()
+    {
+        var result = await _clientesService.GetAllAsync();
+        return Ok(result);
+    }
+    ```
+  </Step>
+  
+  <Step title="Application Service Orchestrates Business Logic">
+    The application service uses `Vantix.Core` business logic and may interact with repositories
+    
+    ```csharp
+    public async Task<IEnumerable<ClienteDto>> GetAllAsync()
+    {
+        var clientes = await _repository.GetAllAsync();
+        return _mapper.Map<IEnumerable<ClienteDto>>(clientes);
+    }
+    ```
+  </Step>
+  
+  <Step title="Infrastructure Accesses Data">
+    Repository in `Vantix.Infrastructure` uses `VantixDbContext` to query the database
+    
+    ```csharp
+    public async Task<IEnumerable<Clientes>> GetAllAsync()
+    {
+        return await _context.Clientes
+            .Where(c => c.Activo == true)
+            .ToListAsync();
+    }
+    ```
+  </Step>
+  
+  <Step title="Response Returns Through Layers">
+    Data flows back through the layers, transformed at each level until it reaches the client
+  </Step>
+</Steps>
+
+## Database Scaffolding Strategy
+
+Vantix uses a **Database First** approach with EF Core scaffolding:
+
+```batch scaffold.bat
+dotnet ef dbcontext scaffold "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;" Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --force ^
+  --no-pluralize ^
+  --namespace Vantix.Domain.Entities.Models ^
+  --context-namespace Vantix.Infrastructure.Persistence
+```
+
+<Info>
+  This approach generates:
+  - **Entities** in `Vantix.Domain/Entities/Models` (domain layer)
+  - **DbContext** in `Vantix.Infrastructure/Persistence` (infrastructure layer)
+</Info>
+
+## Benefits of This Implementation
+
+<CardGroup cols={2}>
+  <Card title="Testable Business Logic" icon="vial">
+    Core and Domain layers can be tested without any infrastructure dependencies
+  </Card>
+  <Card title="Flexible Data Access" icon="database">
+    Database can be changed without affecting business logic
+  </Card>
+  <Card title="Independent Development" icon="users">
+    Teams can work on different layers simultaneously
+  </Card>
+  <Card title="Technology Agnostic" icon="shield">
+    Business rules don't depend on specific frameworks or libraries
+  </Card>
+</CardGroup>
+
+## Dependency Injection
+
+The API layer configures dependency injection to wire up all the layers:
+
+```csharp Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+// Infrastructure services
+builder.Services.AddDbContext<VantixDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Application services
+builder.Services.AddScoped<IClientesService, ClientesService>();
+
+// Repository pattern
+builder.Services.AddScoped<IClientesRepository, ClientesRepository>();
+```
+
+<Warning>
+  All dependency registration happens in the API layer (`Program.cs`), never in the inner layers. This maintains the dependency rule.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="/architecture/project-structure">
+    Explore the detailed structure of each project
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Return to the architecture overview
+  </Card>
+</CardGroup>

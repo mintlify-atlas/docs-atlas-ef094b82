@@ -1,0 +1,376 @@
+---
+title: 'Database Migrations'
+description: 'Working with Entity Framework Core database scaffolding in a database-first approach'
+icon: 'database'
+---
+
+## Overview
+
+The Vantix Sales API uses a **database-first approach** with Entity Framework Core. This means:
+
+- Database schema changes are made directly in SQL Server
+- Entity classes are generated from the existing database
+- The `VantixDbContext` is automatically scaffolded
+
+<Note>
+  Unlike code-first migrations where you write C# classes and generate database schema, this project **starts with the database** and generates code from it.
+</Note>
+
+## Database-First vs Code-First
+
+<CardGroup cols={2}>
+  <Card title="Database-First" icon="database">
+    **Used in this project**
+    
+    - Schema designed in SQL Server
+    - Entity classes generated from DB
+    - Better for existing databases
+    - Full control over SQL schema
+  </Card>
+  <Card title="Code-First" icon="code">
+    **Alternative approach**
+    
+    - C# classes define schema
+    - Migrations generate SQL
+    - Better for new projects
+    - Version-controlled schema changes
+  </Card>
+</CardGroup>
+
+## The Scaffolding Script
+
+The project includes a `scaffold.bat` script at the root level that automates the scaffolding process.
+
+### Script Contents
+
+```batch
+@echo off
+echo 🚀 Generando modelos en Domain e Infraestructura...
+
+dotnet ef dbcontext scaffold "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;" Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --force ^
+  --no-pluralize ^
+  --namespace Vantix.Domain.Entities.Models ^
+  --context-namespace Vantix.Infrastructure.Persistence
+
+echo ✅ ¡Revisa tus carpetas ahora!
+pause
+```
+
+### Understanding the Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `--project Vantix.Infrastructure` | Target project for the DbContext |
+| `--output-dir ../Vantix.Domain/Entities/Models` | Where entity classes are generated |
+| `--context-dir Persistence` | Where VantixDbContext is created |
+| `--context VantixDbContext` | Name of the DbContext class |
+| `--force` | Overwrites existing files |
+| `--no-pluralize` | Keeps table names as-is (no pluralization) |
+| `--namespace Vantix.Domain.Entities.Models` | Namespace for entity classes |
+| `--context-namespace Vantix.Infrastructure.Persistence` | Namespace for DbContext |
+
+<Warning>
+  The `--force` flag will **overwrite existing entity files**. Any manual changes to generated entities will be lost. Use partial classes for custom logic.
+</Warning>
+
+## Running the Scaffolding Script
+
+<Steps>
+  <Step title="Make Database Changes">
+    Create or modify tables in SQL Server using SQL Server Management Studio or your preferred tool.
+
+    Example: Creating a new table
+    ```sql
+    CREATE TABLE Productos (
+        ProductoId INT PRIMARY KEY IDENTITY(1,1),
+        Nombre NVARCHAR(200) NOT NULL,
+        Descripcion NVARCHAR(500),
+        Precio DECIMAL(18,2) NOT NULL,
+        Stock INT NOT NULL DEFAULT 0,
+        Activo BIT DEFAULT 1,
+        FechaCreacion DATETIME DEFAULT GETDATE()
+    );
+    ```
+  </Step>
+
+  <Step title="Update Connection String">
+    Before running the script, ensure the connection string in `scaffold.bat` matches your SQL Server instance:
+
+    ```batch
+    "Server=YOUR_SERVER;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;"
+    ```
+  </Step>
+
+  <Step title="Run the Script">
+    Execute the scaffolding script from the project root:
+
+    ```bash
+    scaffold.bat
+    ```
+
+    Or run the command manually:
+    ```bash
+    dotnet ef dbcontext scaffold "Server=localhost;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;" Microsoft.EntityFrameworkCore.SqlServer --project Vantix.Infrastructure --output-dir ../Vantix.Domain/Entities/Models --context-dir Persistence --context VantixDbContext --force --no-pluralize --namespace Vantix.Domain.Entities.Models --context-namespace Vantix.Infrastructure.Persistence
+    ```
+  </Step>
+
+  <Step title="Review Generated Files">
+    Check the generated files:
+
+    - **Entity classes**: `Vantix.Domain/Entities/Models/*.cs`
+    - **DbContext**: `Vantix.Infrastructure/Persistence/VantixDbContext.cs`
+
+    Example generated entity (Clientes):
+    ```csharp
+    using System;
+    using System.Collections.Generic;
+
+    namespace Vantix.Domain.Entities.Models;
+
+    public partial class Clientes
+    {
+        public int ClienteId { get; set; }
+        public string Nombre { get; set; } = null!;
+        public string Apellido { get; set; } = null!;
+        public string DocumentoIdentidad { get; set; } = null!;
+        public string? Email { get; set; }
+        public string? Telefono { get; set; }
+        public DateTime? FechaRegistro { get; set; }
+        public bool? Activo { get; set; }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Generated DbContext
+
+The scaffolding process generates a complete `VantixDbContext` class:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+using Vantix.Domain.Entities.Models;
+
+namespace Vantix.Infrastructure.Persistence;
+
+public partial class VantixDbContext : DbContext
+{
+    public VantixDbContext()
+    {
+    }
+
+    public VantixDbContext(DbContextOptions<VantixDbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<Clientes> Clientes { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Clientes>(entity =>
+        {
+            entity.HasKey(e => e.ClienteId).HasName("PK__Clientes__71ABD0872790C1F1");
+
+            entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A").IsUnique();
+
+            entity.Property(e => e.Activo).HasDefaultValue(true);
+            entity.Property(e => e.Apellido).HasMaxLength(100);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(150);
+            entity.Property(e => e.FechaRegistro)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Nombre).HasMaxLength(100);
+            entity.Property(e => e.Telefono).HasMaxLength(20);
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+```
+
+### Key Features of Generated DbContext
+
+- **DbSet properties** for each table
+- **Fluent API configuration** in `OnModelCreating`
+- **Primary keys, indexes, and constraints** are preserved
+- **Default values and SQL expressions** are mapped
+- **Partial class** allows custom extensions
+
+## Best Practices
+
+### 1. Use Partial Classes for Custom Logic
+
+Since generated files are overwritten, use partial classes for custom properties and methods:
+
+```csharp
+// Vantix.Domain/Entities/Models/Clientes.Partial.cs
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    // Custom computed property
+    public string NombreCompleto => $"{Nombre} {Apellido}";
+    
+    // Custom validation logic
+    public bool EsEmailValido()
+    {
+        return !string.IsNullOrEmpty(Email) && Email.Contains("@");
+    }
+}
+```
+
+### 2. Extend DbContext with Partial Methods
+
+```csharp
+// Vantix.Infrastructure/Persistence/VantixDbContext.Partial.cs
+using Microsoft.EntityFrameworkCore;
+
+namespace Vantix.Infrastructure.Persistence;
+
+public partial class VantixDbContext
+{
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
+    {
+        // Add custom configurations here
+        modelBuilder.Entity<Clientes>()
+            .HasQueryFilter(c => c.Activo == true);
+    }
+}
+```
+
+### 3. Version Control Your Database Schema
+
+While using database-first, maintain SQL scripts for schema changes:
+
+```sql
+-- migrations/001_create_clientes_table.sql
+CREATE TABLE Clientes (
+    ClienteId INT PRIMARY KEY IDENTITY(1,1),
+    Nombre NVARCHAR(100) NOT NULL,
+    Apellido NVARCHAR(100) NOT NULL,
+    DocumentoIdentidad NVARCHAR(20) NOT NULL UNIQUE,
+    Email NVARCHAR(150),
+    Telefono NVARCHAR(20),
+    FechaRegistro DATETIME DEFAULT GETDATE(),
+    Activo BIT DEFAULT 1
+);
+```
+
+### 4. Document Schema Changes
+
+Keep a changelog of database modifications:
+
+- Date of change
+- Tables affected
+- Reason for change
+- Migration script location
+
+## Updating Models After Database Changes
+
+<Steps>
+  <Step title="Identify Changes">
+    Determine what changed in the database:
+    - New tables added
+    - Columns added/removed/modified
+    - Relationships changed
+    - Constraints updated
+  </Step>
+
+  <Step title="Backup Custom Code">
+    If you have partial classes, ensure they're in separate files that won't be overwritten.
+  </Step>
+
+  <Step title="Run Scaffold">
+    Execute `scaffold.bat` to regenerate all entity classes and the DbContext.
+  </Step>
+
+  <Step title="Verify Changes">
+    - Check that new entities appear in the Models folder
+    - Verify DbSet properties are added to VantixDbContext
+    - Review OnModelCreating configuration
+    - Ensure partial classes still compile
+  </Step>
+
+  <Step title="Update Dependencies">
+    Update any code that depends on the modified entities:
+    - Controllers
+    - Services
+    - DTOs
+    - Validation logic
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Scaffolding Fails
+
+<AccordionGroup>
+  <Accordion title="Connection string error">
+    - Verify SQL Server is running
+    - Check server name and database name
+    - Ensure you have permissions to read schema
+    - Test connection with SQL Server Management Studio
+  </Accordion>
+
+  <Accordion title="EF Core tools not installed">
+    Install Entity Framework Core tools:
+    ```bash
+    dotnet tool install --global dotnet-ef
+    ```
+    
+    Or update existing installation:
+    ```bash
+    dotnet tool update --global dotnet-ef
+    ```
+  </Accordion>
+
+  <Accordion title="Wrong output directory">
+    Ensure you're running the script from the correct location (project root) or adjust the `--output-dir` path accordingly.
+  </Accordion>
+</AccordionGroup>
+
+## Configuration in Projects
+
+The required NuGet packages are already configured:
+
+### Vantix.Infrastructure.csproj
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
+  <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.3">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
+</ItemGroup>
+```
+
+<Tip>
+  All EF Core packages are version 10.0.3 to match the .NET 10 framework used in this project.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Adding Entities" icon="plus" href="/development/adding-entities">
+    Learn how to add new entities to the system
+  </Card>
+  <Card title="Setup Guide" icon="laptop-code" href="/development/setup">
+    Return to development setup instructions
+  </Card>
+</CardGroup>

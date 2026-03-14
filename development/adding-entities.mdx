@@ -1,0 +1,608 @@
+---
+title: 'Adding New Entities'
+description: 'Step-by-step guide to adding new entities to the Vantix Sales API'
+icon: 'plus-circle'
+---
+
+## Overview
+
+Adding new entities to the Vantix Sales API involves working with the database first, then generating the corresponding C# classes and integrating them into the application.
+
+<Note>
+  This guide follows the **database-first approach** used in this project. All schema changes start in SQL Server.
+</Note>
+
+## Complete Workflow
+
+<Steps>
+  <Step title="Design the Database Table">
+    Start by designing your table schema in SQL Server. Consider:
+
+    - Primary key (usually an IDENTITY column)
+    - Required vs optional columns
+    - Data types and constraints
+    - Indexes for performance
+    - Default values
+    - Relationships with other tables
+
+    ### Example: Creating a Productos Table
+
+    ```sql
+    CREATE TABLE Productos (
+        ProductoId INT PRIMARY KEY IDENTITY(1,1),
+        Nombre NVARCHAR(200) NOT NULL,
+        Descripcion NVARCHAR(500),
+        Precio DECIMAL(18,2) NOT NULL,
+        Stock INT NOT NULL DEFAULT 0,
+        CategoriaId INT,
+        Activo BIT DEFAULT 1,
+        FechaCreacion DATETIME DEFAULT GETDATE(),
+        FechaModificacion DATETIME,
+        
+        CONSTRAINT FK_Productos_Categorias 
+            FOREIGN KEY (CategoriaId) 
+            REFERENCES Categorias(CategoriaId),
+        
+        CONSTRAINT CK_Productos_Precio 
+            CHECK (Precio >= 0),
+        
+        CONSTRAINT CK_Productos_Stock 
+            CHECK (Stock >= 0)
+    );
+
+    -- Create index for common queries
+    CREATE INDEX IX_Productos_CategoriaId ON Productos(CategoriaId);
+    CREATE INDEX IX_Productos_Activo ON Productos(Activo);
+    ```
+
+    <Tip>
+      Use meaningful constraint names (FK_, CK_, IX_ prefixes) to make the schema self-documenting.
+    </Tip>
+  </Step>
+
+  <Step title="Run the Scaffolding Script">
+    After creating the table in SQL Server, run the scaffold script to generate entity classes:
+
+    ```bash
+    scaffold.bat
+    ```
+
+    This will:
+    - Generate a `Productos.cs` class in `Vantix.Domain/Entities/Models/`
+    - Add a `DbSet<Productos>` property to `VantixDbContext`
+    - Configure the entity in `OnModelCreating` with Fluent API
+
+    ### Generated Entity Class
+
+    ```csharp
+    using System;
+    using System.Collections.Generic;
+
+    namespace Vantix.Domain.Entities.Models;
+
+    public partial class Productos
+    {
+        public int ProductoId { get; set; }
+        public string Nombre { get; set; } = null!;
+        public string? Descripcion { get; set; }
+        public decimal Precio { get; set; }
+        public int Stock { get; set; }
+        public int? CategoriaId { get; set; }
+        public bool? Activo { get; set; }
+        public DateTime? FechaCreacion { get; set; }
+        public DateTime? FechaModificacion { get; set; }
+
+        public virtual Categorias? Categoria { get; set; }
+    }
+    ```
+
+    ### Updated DbContext
+
+    ```csharp
+    public partial class VantixDbContext : DbContext
+    {
+        // Existing DbSets
+        public virtual DbSet<Clientes> Clientes { get; set; }
+        
+        // Newly added
+        public virtual DbSet<Productos> Productos { get; set; }
+
+        // ...
+    }
+    ```
+  </Step>
+
+  <Step title="Add Custom Logic (Optional)">
+    Create a partial class for custom properties and methods that won't be overwritten:
+
+    ```csharp
+    // Vantix.Domain/Entities/Models/Productos.Partial.cs
+    namespace Vantix.Domain.Entities.Models;
+
+    public partial class Productos
+    {
+        // Computed property
+        public decimal PrecioConImpuesto => Precio * 1.16m;
+        
+        // Business logic
+        public bool TieneStock(int cantidad)
+        {
+            return Stock >= cantidad && Activo == true;
+        }
+        
+        // Validation
+        public bool EsValido()
+        {
+            return !string.IsNullOrWhiteSpace(Nombre) 
+                && Precio > 0 
+                && Stock >= 0;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Create DTOs (Data Transfer Objects)">
+    Define DTOs for API requests and responses:
+
+    ```csharp
+    // Vantix.Application/DTOs/ProductoDto.cs
+    namespace Vantix.Application.DTOs;
+
+    public class ProductoDto
+    {
+        public int ProductoId { get; set; }
+        public string Nombre { get; set; } = null!;
+        public string? Descripcion { get; set; }
+        public decimal Precio { get; set; }
+        public int Stock { get; set; }
+        public int? CategoriaId { get; set; }
+        public bool? Activo { get; set; }
+    }
+
+    public class CreateProductoDto
+    {
+        public string Nombre { get; set; } = null!;
+        public string? Descripcion { get; set; }
+        public decimal Precio { get; set; }
+        public int Stock { get; set; }
+        public int? CategoriaId { get; set; }
+    }
+
+    public class UpdateProductoDto
+    {
+        public string? Nombre { get; set; }
+        public string? Descripcion { get; set; }
+        public decimal? Precio { get; set; }
+        public int? Stock { get; set; }
+        public int? CategoriaId { get; set; }
+        public bool? Activo { get; set; }
+    }
+    ```
+  </Step>
+
+  <Step title="Create a Service (Optional)">
+    Implement business logic in the Application layer:
+
+    ```csharp
+    // Vantix.Application/Services/ProductoService.cs
+    using Vantix.Application.DTOs;
+    using Vantix.Domain.Entities.Models;
+    using Vantix.Infrastructure.Persistence;
+    using Microsoft.EntityFrameworkCore;
+
+    namespace Vantix.Application.Services;
+
+    public interface IProductoService
+    {
+        Task<List<ProductoDto>> GetAllAsync();
+        Task<ProductoDto?> GetByIdAsync(int id);
+        Task<ProductoDto> CreateAsync(CreateProductoDto dto);
+        Task<ProductoDto?> UpdateAsync(int id, UpdateProductoDto dto);
+        Task<bool> DeleteAsync(int id);
+    }
+
+    public class ProductoService : IProductoService
+    {
+        private readonly VantixDbContext _context;
+
+        public ProductoService(VantixDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<List<ProductoDto>> GetAllAsync()
+        {
+            return await _context.Productos
+                .Where(p => p.Activo == true)
+                .Select(p => new ProductoDto
+                {
+                    ProductoId = p.ProductoId,
+                    Nombre = p.Nombre,
+                    Descripcion = p.Descripcion,
+                    Precio = p.Precio,
+                    Stock = p.Stock,
+                    CategoriaId = p.CategoriaId,
+                    Activo = p.Activo
+                })
+                .ToListAsync();
+        }
+
+        public async Task<ProductoDto?> GetByIdAsync(int id)
+        {
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null) return null;
+
+            return new ProductoDto
+            {
+                ProductoId = producto.ProductoId,
+                Nombre = producto.Nombre,
+                Descripcion = producto.Descripcion,
+                Precio = producto.Precio,
+                Stock = producto.Stock,
+                CategoriaId = producto.CategoriaId,
+                Activo = producto.Activo
+            };
+        }
+
+        public async Task<ProductoDto> CreateAsync(CreateProductoDto dto)
+        {
+            var producto = new Productos
+            {
+                Nombre = dto.Nombre,
+                Descripcion = dto.Descripcion,
+                Precio = dto.Precio,
+                Stock = dto.Stock,
+                CategoriaId = dto.CategoriaId,
+                Activo = true,
+                FechaCreacion = DateTime.Now
+            };
+
+            _context.Productos.Add(producto);
+            await _context.SaveChangesAsync();
+
+            return new ProductoDto
+            {
+                ProductoId = producto.ProductoId,
+                Nombre = producto.Nombre,
+                Descripcion = producto.Descripcion,
+                Precio = producto.Precio,
+                Stock = producto.Stock,
+                CategoriaId = producto.CategoriaId,
+                Activo = producto.Activo
+            };
+        }
+
+        // Implement UpdateAsync and DeleteAsync...
+    }
+    ```
+  </Step>
+
+  <Step title="Create a Controller">
+    Add an API controller to expose endpoints:
+
+    ```csharp
+    // Vantix.Api/Controllers/ProductosController.cs
+    using Microsoft.AspNetCore.Mvc;
+    using Vantix.Application.DTOs;
+    using Vantix.Application.Services;
+
+    namespace Vantix.Api.Controllers;
+
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProductosController : ControllerBase
+    {
+        private readonly IProductoService _productoService;
+
+        public ProductosController(IProductoService productoService)
+        {
+            _productoService = productoService;
+        }
+
+        /// <summary>
+        /// Gets all active products
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<List<ProductoDto>>> GetAll()
+        {
+            var productos = await _productoService.GetAllAsync();
+            return Ok(productos);
+        }
+
+        /// <summary>
+        /// Gets a product by ID
+        /// </summary>
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ProductoDto>> GetById(int id)
+        {
+            var producto = await _productoService.GetByIdAsync(id);
+            if (producto == null)
+                return NotFound(new { message = $"Producto {id} no encontrado" });
+
+            return Ok(producto);
+        }
+
+        /// <summary>
+        /// Creates a new product
+        /// </summary>
+        [HttpPost]
+        public async Task<ActionResult<ProductoDto>> Create([FromBody] CreateProductoDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var producto = await _productoService.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = producto.ProductoId }, producto);
+        }
+
+        /// <summary>
+        /// Updates an existing product
+        /// </summary>
+        [HttpPut("{id}")]
+        public async Task<ActionResult<ProductoDto>> Update(int id, [FromBody] UpdateProductoDto dto)
+        {
+            var producto = await _productoService.UpdateAsync(id, dto);
+            if (producto == null)
+                return NotFound(new { message = $"Producto {id} no encontrado" });
+
+            return Ok(producto);
+        }
+
+        /// <summary>
+        /// Deletes a product (soft delete)
+        /// </summary>
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var result = await _productoService.DeleteAsync(id);
+            if (!result)
+                return NotFound(new { message = $"Producto {id} no encontrado" });
+
+            return NoContent();
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Register Services">
+    Register the service and DbContext in `Program.cs`:
+
+    ```csharp
+    using Microsoft.EntityFrameworkCore;
+    using Vantix.Application.Services;
+    using Vantix.Infrastructure.Persistence;
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Add services to the container
+    builder.Services.AddControllers();
+    builder.Services.AddOpenApi();
+
+    // Register DbContext
+    builder.Services.AddDbContext<VantixDbContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("ventixDb")));
+
+    // Register application services
+    builder.Services.AddScoped<IProductoService, ProductoService>();
+
+    var app = builder.Build();
+
+    // Configure the HTTP request pipeline
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+    }
+
+    app.UseHttpsRedirection();
+    app.UseAuthorization();
+    app.MapControllers();
+
+    app.Run();
+    ```
+  </Step>
+
+  <Step title="Test the Endpoints">
+    Run the application and test your new endpoints:
+
+    ```bash
+    cd Vantix.Api
+    dotnet run
+    ```
+
+    Test with curl or Postman:
+
+    ```bash
+    # Get all products
+    curl https://localhost:5001/api/productos
+
+    # Create a product
+    curl -X POST https://localhost:5001/api/productos \
+      -H "Content-Type: application/json" \
+      -d '{
+        "nombre": "Laptop Dell XPS",
+        "descripcion": "15 inch, 16GB RAM",
+        "precio": 1299.99,
+        "stock": 10,
+        "categoriaId": 1
+      }'
+
+    # Get product by ID
+    curl https://localhost:5001/api/productos/1
+    ```
+  </Step>
+</Steps>
+
+## Example: The Clientes Entity
+
+Let's examine the existing `Clientes` entity as a reference:
+
+### Database Table
+
+```sql
+CREATE TABLE Clientes (
+    ClienteId INT PRIMARY KEY IDENTITY(1,1),
+    Nombre NVARCHAR(100) NOT NULL,
+    Apellido NVARCHAR(100) NOT NULL,
+    DocumentoIdentidad NVARCHAR(20) NOT NULL UNIQUE,
+    Email NVARCHAR(150),
+    Telefono NVARCHAR(20),
+    FechaRegistro DATETIME DEFAULT GETDATE(),
+    Activo BIT DEFAULT 1
+);
+```
+
+### Generated Entity Class
+
+```csharp
+using System;
+using System.Collections.Generic;
+
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+    public string Nombre { get; set; } = null!;
+    public string Apellido { get; set; } = null!;
+    public string DocumentoIdentidad { get; set; } = null!;
+    public string? Email { get; set; }
+    public string? Telefono { get; set; }
+    public DateTime? FechaRegistro { get; set; }
+    public bool? Activo { get; set; }
+}
+```
+
+### DbContext Configuration
+
+```csharp
+modelBuilder.Entity<Clientes>(entity =>
+{
+    entity.HasKey(e => e.ClienteId)
+        .HasName("PK__Clientes__71ABD0872790C1F1");
+
+    entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A")
+        .IsUnique();
+
+    entity.Property(e => e.Activo).HasDefaultValue(true);
+    entity.Property(e => e.Apellido).HasMaxLength(100);
+    entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+    entity.Property(e => e.Email).HasMaxLength(150);
+    entity.Property(e => e.FechaRegistro)
+        .HasDefaultValueSql("(getdate())")
+        .HasColumnType("datetime");
+    entity.Property(e => e.Nombre).HasMaxLength(100);
+    entity.Property(e => e.Telefono).HasMaxLength(20);
+});
+```
+
+## Best Practices
+
+### Database Design
+
+<CardGroup cols={2}>
+  <Card title="Naming Conventions" icon="tag">
+    - Use PascalCase for table names
+    - Use singular names (Producto, not Productos)
+    - Use descriptive column names
+    - Suffix IDs with "Id" (ProductoId)
+  </Card>
+  <Card title="Data Types" icon="database">
+    - INT for IDs and quantities
+    - NVARCHAR for text (supports Unicode)
+    - DECIMAL(18,2) for currency
+    - DATETIME for timestamps
+    - BIT for boolean flags
+  </Card>
+  <Card title="Constraints" icon="shield">
+    - Always define PRIMARY KEY
+    - Add UNIQUE constraints where needed
+    - Use CHECK constraints for validation
+    - Define FOREIGN KEY relationships
+  </Card>
+  <Card title="Defaults" icon="check">
+    - Set DEFAULT values for common fields
+    - Use GETDATE() for timestamps
+    - Default Activo to true (1)
+    - Use IDENTITY for auto-increment
+  </Card>
+</CardGroup>
+
+### Entity Design
+
+1. **Use partial classes** for custom logic
+2. **Keep entities simple** - just properties and navigation
+3. **Use nullable types** appropriately (? suffix)
+4. **Follow C# naming conventions** - PascalCase for properties
+
+### Service Layer
+
+1. **Use interfaces** for testability
+2. **Return DTOs**, not entities
+3. **Implement async methods** for database operations
+4. **Use dependency injection** for DbContext
+5. **Handle errors gracefully**
+
+### Controller Design
+
+1. **Use attribute routing** `[Route("api/[controller]")]`
+2. **Return proper HTTP status codes** (200, 201, 404, 400, etc.)
+3. **Add XML comments** for API documentation
+4. **Validate input** with ModelState
+5. **Use DTOs** for request/response bodies
+
+## Common Patterns
+
+### Soft Delete Pattern
+
+```csharp
+public async Task<bool> DeleteAsync(int id)
+{
+    var entity = await _context.Productos.FindAsync(id);
+    if (entity == null) return false;
+
+    entity.Activo = false;
+    entity.FechaModificacion = DateTime.Now;
+    await _context.SaveChangesAsync();
+    
+    return true;
+}
+```
+
+### Audit Fields Pattern
+
+```sql
+ALTER TABLE Productos ADD
+    CreadoPor NVARCHAR(100),
+    FechaCreacion DATETIME DEFAULT GETDATE(),
+    ModificadoPor NVARCHAR(100),
+    FechaModificacion DATETIME;
+```
+
+### Filtering Pattern
+
+```csharp
+public async Task<List<ProductoDto>> GetByCategoriaAsync(int categoriaId)
+{
+    return await _context.Productos
+        .Where(p => p.CategoriaId == categoriaId && p.Activo == true)
+        .Select(p => new ProductoDto { /* ... */ })
+        .ToListAsync();
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Coding Standards" icon="code" href="/development/coding-standards">
+    Learn the project's coding conventions
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/development/error-handling">
+    Implement proper error handling
+  </Card>
+  <Card title="Database Migrations" icon="database" href="/development/database-migrations">
+    Understanding the scaffolding process
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Explore the API documentation
+  </Card>
+</CardGroup>

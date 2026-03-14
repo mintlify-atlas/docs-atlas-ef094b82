@@ -1,0 +1,341 @@
+---
+title: 'Environment Configuration'
+description: 'Manage environment-specific settings for Development, Staging, and Production'
+icon: 'gear'
+---
+
+## Overview
+
+The Vantix Sales API uses ASP.NET Core's configuration system to manage environment-specific settings. This allows different configurations for Development, Staging, and Production environments without code changes.
+
+## Configuration Files
+
+Vantix uses a layered configuration approach:
+
+<Steps>
+  <Step title="Base Configuration: appsettings.json">
+    Contains settings common to all environments.
+  </Step>
+  
+  <Step title="Environment-Specific: appsettings.{Environment}.json">
+    Overrides base settings for specific environments.
+  </Step>
+  
+  <Step title="Environment Variables">
+    Highest priority - overrides all file-based settings.
+  </Step>
+</Steps>
+
+## Base Configuration
+
+From `Vantix.Api/appsettings.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
+
+### Base Settings Explained
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `Logging.LogLevel.Default` | `Information` | Default log level for all categories |
+| `Logging.LogLevel.Microsoft.AspNetCore` | `Warning` | Reduced logging for ASP.NET Core internals |
+| `AllowedHosts` | `*` | Allows requests from any host (should be restricted in production) |
+
+## Development Configuration
+
+From `Vantix.Api/appsettings.Development.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "ventixDb": "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "Jwt": {
+    "Key": "Esta_Es_Una_Llave_Super_Secreta_De_Al_Menos_32_Caracteres_12345!"
+  }
+}
+```
+
+### Development-Specific Features
+
+<CardGroup cols={2}>
+  <Card title="Local Database" icon="database">
+    Uses local SQL Server instance with Windows Authentication for easy development.
+  </Card>
+  
+  <Card title="JWT Configuration" icon="key">
+    Contains JWT signing key for authentication (should be different in production).
+  </Card>
+  
+  <Card title="Detailed Logging" icon="list">
+    Information level logging for debugging and development.
+  </Card>
+  
+  <Card title="OpenAPI Enabled" icon="book">
+    Swagger/OpenAPI documentation available only in Development mode.
+  </Card>
+</CardGroup>
+
+## Environment-Specific Configuration
+
+### Production Configuration (Recommended)
+
+Create `appsettings.Production.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Warning",
+      "Microsoft.AspNetCore": "Error"
+    }
+  },
+  "ConnectionStrings": {
+    "ventixDb": "Server=prod-sql-server;Database=VantixV1;User Id=vantix_api;Password=${DB_PASSWORD};Encrypt=True"
+  },
+  "AllowedHosts": "api.vantix.com",
+  "Jwt": {
+    "Key": "${JWT_SECRET_KEY}",
+    "Issuer": "https://api.vantix.com",
+    "Audience": "https://app.vantix.com",
+    "ExpirationMinutes": 60
+  }
+}
+```
+
+<Warning>
+**Production Security Requirements:**
+- Never commit production passwords or secrets to source control
+- Use environment variables for all sensitive data
+- Restrict `AllowedHosts` to your actual domain
+- Enable encryption for database connections
+- Use strong, randomly-generated JWT keys
+</Warning>
+
+### Staging Configuration (Recommended)
+
+Create `appsettings.Staging.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "ventixDb": "Server=staging-sql-server;Database=VantixV1_Staging;User Id=vantix_api;Password=${DB_PASSWORD};Encrypt=True"
+  },
+  "AllowedHosts": "staging-api.vantix.com",
+  "Jwt": {
+    "Key": "${JWT_SECRET_KEY}",
+    "Issuer": "https://staging-api.vantix.com",
+    "Audience": "https://staging-app.vantix.com",
+    "ExpirationMinutes": 120
+  }
+}
+```
+
+## Setting the Environment
+
+<CodeGroup>
+```bash Windows (PowerShell)
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run
+```
+
+```bash Windows (CMD)
+set ASPNETCORE_ENVIRONMENT=Development
+dotnet run
+```
+
+```bash Linux/macOS
+export ASPNETCORE_ENVIRONMENT=Development
+dotnet run
+```
+
+```bash Docker
+docker run -e ASPNETCORE_ENVIRONMENT=Production vantix-api
+```
+</CodeGroup>
+
+## Environment Variables
+
+Override configuration values using environment variables:
+
+<CodeGroup>
+```bash Database Password
+export ConnectionStrings__ventixDb="Server=localhost;Database=VantixV1;User Id=api;Password=SecurePass123"
+```
+
+```bash JWT Key
+export Jwt__Key="your-super-secret-jwt-key-at-least-32-characters-long"
+```
+
+```bash Log Level
+export Logging__LogLevel__Default="Debug"
+```
+</CodeGroup>
+
+<Info>
+ASP.NET Core uses double underscores (`__`) to represent nested configuration values in environment variables.
+</Info>
+
+## Accessing Configuration in Code
+
+Retrieve configuration values in your application:
+
+```csharp
+public class MyService
+{
+    private readonly IConfiguration _configuration;
+
+    public MyService(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
+
+    public void UseConfiguration()
+    {
+        // Get connection string
+        var connectionString = _configuration.GetConnectionString("ventixDb");
+
+        // Get JWT key
+        var jwtKey = _configuration["Jwt:Key"];
+
+        // Get with default value
+        var timeout = _configuration.GetValue<int>("ApiTimeout", 30);
+
+        // Bind to object
+        var jwtSettings = _configuration.GetSection("Jwt").Get<JwtSettings>();
+    }
+}
+```
+
+## Configuration Priority
+
+Configuration sources are applied in this order (later sources override earlier ones):
+
+<Steps>
+  <Step title="appsettings.json">
+    Base configuration file
+  </Step>
+  
+  <Step title="appsettings.{Environment}.json">
+    Environment-specific overrides
+  </Step>
+  
+  <Step title="User Secrets (Development only)">
+    Local developer secrets (not committed to source control)
+  </Step>
+  
+  <Step title="Environment Variables">
+    System or container environment variables
+  </Step>
+  
+  <Step title="Command Line Arguments">
+    Highest priority - passed when starting the application
+  </Step>
+</Steps>
+
+## User Secrets (Development)
+
+For local development, use User Secrets to store sensitive data:
+
+```bash
+# Initialize user secrets
+cd Vantix.Api
+dotnet user-secrets init
+
+# Set a secret
+dotnet user-secrets set "Jwt:Key" "my-local-development-jwt-key"
+dotnet user-secrets set "ConnectionStrings:ventixDb" "Server=localhost;Database=VantixV1;Trusted_Connection=True"
+
+# List all secrets
+dotnet user-secrets list
+```
+
+<Tip>
+User Secrets are stored outside your project directory and never committed to source control, making them perfect for local development.
+</Tip>
+
+## Environment Detection in Code
+
+From `Program.cs:12-14`, the application already detects the environment:
+
+```csharp
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+```
+
+You can check other environments:
+
+```csharp
+if (app.Environment.IsProduction())
+{
+    // Production-only configuration
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+if (app.Environment.IsStaging())
+{
+    // Staging-only configuration
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Never Commit Secrets" icon="lock">
+    Keep `appsettings.Production.json` out of source control or use environment variable placeholders.
+  </Card>
+  
+  <Card title="Use User Secrets" icon="user-secret">
+    Store local development secrets with `dotnet user-secrets` instead of in configuration files.
+  </Card>
+  
+  <Card title="Environment Variables" icon="server">
+    Use environment variables for all deployment environments (Docker, Kubernetes, Azure, etc.).
+  </Card>
+  
+  <Card title="Validate Configuration" icon="check">
+    Add configuration validation at startup to catch missing or invalid settings early.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Configuration Not Loading
+
+1. Verify the `ASPNETCORE_ENVIRONMENT` variable is set correctly
+2. Ensure file names match exactly: `appsettings.Development.json` (case-sensitive on Linux)
+3. Check that files are copied to output directory
+
+### Environment Variables Not Working
+
+1. Use double underscores (`__`) for nested values
+2. Restart your application after setting environment variables
+3. Check variable names are exact matches (case-sensitive)
+
+<Note>
+Configuration changes require restarting the application. Hot reload does not apply to configuration files.
+</Note>

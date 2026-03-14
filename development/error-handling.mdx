@@ -1,0 +1,677 @@
+---
+title: 'Error Handling'
+description: 'Error handling patterns and best practices for the Vantix Sales API'
+icon: 'triangle-exclamation'
+---
+
+## Overview
+
+Proper error handling is crucial for building robust APIs. This guide covers error handling patterns, exception management, validation, and logging strategies for the Vantix Sales API.
+
+<Note>
+  This guide describes recommended patterns to implement. Some patterns may need to be added to the existing codebase.
+</Note>
+
+## HTTP Status Codes
+
+Use appropriate HTTP status codes to communicate the result of API requests:
+
+### Success Codes (2xx)
+
+| Code | Status | When to Use |
+|------|--------|-------------|
+| 200 | OK | Successful GET, PUT, PATCH requests |
+| 201 | Created | Successful POST request that creates a resource |
+| 204 | No Content | Successful DELETE request or update with no response body |
+
+### Client Error Codes (4xx)
+
+| Code | Status | When to Use |
+|------|--------|-------------|
+| 400 | Bad Request | Invalid request body, malformed JSON |
+| 401 | Unauthorized | Missing or invalid authentication |
+| 403 | Forbidden | Authenticated but not authorized |
+| 404 | Not Found | Resource doesn't exist |
+| 409 | Conflict | Resource conflict (e.g., duplicate key) |
+| 422 | Unprocessable Entity | Validation errors |
+
+### Server Error Codes (5xx)
+
+| Code | Status | When to Use |
+|------|--------|-------------|
+| 500 | Internal Server Error | Unexpected server errors |
+| 503 | Service Unavailable | Database or external service unavailable |
+
+## Controller Error Handling
+
+### Basic Error Responses
+
+```csharp
+using Microsoft.AspNetCore.Mvc;
+using Vantix.Application.DTOs;
+using Vantix.Application.Services;
+
+namespace Vantix.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ClientesController : ControllerBase
+{
+    private readonly IClienteService _clienteService;
+    private readonly ILogger<ClientesController> _logger;
+
+    public ClientesController(
+        IClienteService clienteService,
+        ILogger<ClientesController> logger)
+    {
+        _clienteService = clienteService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Gets a client by ID
+    /// </summary>
+    /// <param name="id">The client ID</param>
+    /// <returns>The client details</returns>
+    /// <response code="200">Returns the client</response>
+    /// <response code="404">Client not found</response>
+    [HttpGet("{id}")]
+    [ProducesResponseType(typeof(ClienteDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ClienteDto>> GetById(int id)
+    {
+        var cliente = await _clienteService.GetByIdAsync(id);
+        
+        if (cliente == null)
+        {
+            _logger.LogWarning("Cliente {ClienteId} no encontrado", id);
+            return NotFound(new
+            {
+                message = $"Cliente con ID {id} no encontrado",
+                clienteId = id
+            });
+        }
+
+        return Ok(cliente);
+    }
+
+    /// <summary>
+    /// Creates a new client
+    /// </summary>
+    /// <param name="dto">The client data</param>
+    /// <returns>The created client</returns>
+    /// <response code="201">Client created successfully</response>
+    /// <response code="400">Invalid request data</response>
+    /// <response code="409">Client with same document ID already exists</response>
+    [HttpPost]
+    [ProducesResponseType(typeof(ClienteDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ClienteDto>> Create([FromBody] CreateClienteDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var cliente = await _clienteService.CreateAsync(dto);
+            _logger.LogInformation("Cliente {ClienteId} creado exitosamente", cliente.ClienteId);
+            
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = cliente.ClienteId },
+                cliente);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("DocumentoIdentidad"))
+        {
+            _logger.LogWarning(ex, "Intento de crear cliente con documento duplicado: {Documento}", dto.DocumentoIdentidad);
+            return Conflict(new
+            {
+                message = "Ya existe un cliente con el mismo número de documento",
+                documentoIdentidad = dto.DocumentoIdentidad
+            });
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing client
+    /// </summary>
+    [HttpPut("{id}")]
+    [ProducesResponseType(typeof(ClienteDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ClienteDto>> Update(int id, [FromBody] UpdateClienteDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var cliente = await _clienteService.UpdateAsync(id, dto);
+        
+        if (cliente == null)
+        {
+            return NotFound(new { message = $"Cliente {id} no encontrado" });
+        }
+
+        return Ok(cliente);
+    }
+
+    /// <summary>
+    /// Deletes a client (soft delete)
+    /// </summary>
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var result = await _clienteService.DeleteAsync(id);
+        
+        if (!result)
+        {
+            return NotFound(new { message = $"Cliente {id} no encontrado" });
+        }
+
+        _logger.LogInformation("Cliente {ClienteId} eliminado (soft delete)", id);
+        return NoContent();
+    }
+}
+```
+
+## Exception Handling Middleware
+
+Implement global exception handling middleware to catch unhandled exceptions:
+
+```csharp
+// Vantix.Api/Middleware/ExceptionHandlingMiddleware.cs
+using System.Net;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Vantix.Api.Middleware;
+
+public class ExceptionHandlingMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
+
+    public ExceptionHandlingMiddleware(
+        RequestDelegate next,
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IHostEnvironment environment)
+    {
+        _next = next;
+        _logger = logger;
+        _environment = environment;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        try
+        {
+            await _next(context);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception occurred: {Message}", ex.Message);
+            await HandleExceptionAsync(context, ex);
+        }
+    }
+
+    private async Task HandleExceptionAsync(HttpContext context, Exception exception)
+    {
+        context.Response.ContentType = "application/json";
+
+        var problemDetails = new ProblemDetails
+        {
+            Instance = context.Request.Path
+        };
+
+        switch (exception)
+        {
+            case ArgumentNullException or ArgumentException:
+                problemDetails.Title = "Bad Request";
+                problemDetails.Status = (int)HttpStatusCode.BadRequest;
+                problemDetails.Detail = exception.Message;
+                break;
+
+            case KeyNotFoundException:
+                problemDetails.Title = "Not Found";
+                problemDetails.Status = (int)HttpStatusCode.NotFound;
+                problemDetails.Detail = exception.Message;
+                break;
+
+            case InvalidOperationException when exception.Message.Contains("duplicate"):
+                problemDetails.Title = "Conflict";
+                problemDetails.Status = (int)HttpStatusCode.Conflict;
+                problemDetails.Detail = exception.Message;
+                break;
+
+            case UnauthorizedAccessException:
+                problemDetails.Title = "Unauthorized";
+                problemDetails.Status = (int)HttpStatusCode.Unauthorized;
+                problemDetails.Detail = "You are not authorized to access this resource";
+                break;
+
+            default:
+                problemDetails.Title = "Internal Server Error";
+                problemDetails.Status = (int)HttpStatusCode.InternalServerError;
+                problemDetails.Detail = _environment.IsDevelopment() 
+                    ? exception.Message 
+                    : "An error occurred while processing your request";
+                break;
+        }
+
+        // Add stack trace in development
+        if (_environment.IsDevelopment())
+        {
+            problemDetails.Extensions["stackTrace"] = exception.StackTrace;
+        }
+
+        context.Response.StatusCode = problemDetails.Status.Value;
+
+        var json = JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        await context.Response.WriteAsync(json);
+    }
+}
+```
+
+### Register Middleware in Program.cs
+
+```csharp
+using Vantix.Api.Middleware;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+// Add exception handling middleware
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+```
+
+## Validation Error Responses
+
+### Model Validation with Data Annotations
+
+```csharp
+// Vantix.Application/DTOs/CreateClienteDto.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace Vantix.Application.DTOs;
+
+public class CreateClienteDto
+{
+    [Required(ErrorMessage = "El nombre es obligatorio")]
+    [StringLength(100, ErrorMessage = "El nombre no puede exceder 100 caracteres")]
+    public string Nombre { get; set; } = null!;
+
+    [Required(ErrorMessage = "El apellido es obligatorio")]
+    [StringLength(100, ErrorMessage = "El apellido no puede exceder 100 caracteres")]
+    public string Apellido { get; set; } = null!;
+
+    [Required(ErrorMessage = "El documento de identidad es obligatorio")]
+    [StringLength(20, MinimumLength = 5, ErrorMessage = "El documento debe tener entre 5 y 20 caracteres")]
+    public string DocumentoIdentidad { get; set; } = null!;
+
+    [EmailAddress(ErrorMessage = "El email no tiene un formato válido")]
+    [StringLength(150, ErrorMessage = "El email no puede exceder 150 caracteres")]
+    public string? Email { get; set; }
+
+    [Phone(ErrorMessage = "El teléfono no tiene un formato válido")]
+    [StringLength(20, ErrorMessage = "El teléfono no puede exceder 20 caracteres")]
+    public string? Telefono { get; set; }
+}
+```
+
+### Custom Validation
+
+```csharp
+// Vantix.Application/Validators/ClienteValidator.cs
+using Vantix.Application.DTOs;
+
+namespace Vantix.Application.Validators;
+
+public static class ClienteValidator
+{
+    public static (bool IsValid, List<string> Errors) Validate(CreateClienteDto dto)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(dto.Nombre))
+        {
+            errors.Add("El nombre es obligatorio");
+        }
+
+        if (dto.DocumentoIdentidad?.Length < 5)
+        {
+            errors.Add("El documento de identidad debe tener al menos 5 caracteres");
+        }
+
+        if (!string.IsNullOrEmpty(dto.Email) && !dto.Email.Contains('@'))
+        {
+            errors.Add("El formato del email no es válido");
+        }
+
+        return (errors.Count == 0, errors);
+    }
+}
+```
+
+### Validation in Controller
+
+```csharp
+[HttpPost]
+public async Task<ActionResult<ClienteDto>> Create([FromBody] CreateClienteDto dto)
+{
+    // Built-in model validation
+    if (!ModelState.IsValid)
+    {
+        return BadRequest(ModelState);
+    }
+
+    // Custom validation
+    var (isValid, errors) = ClienteValidator.Validate(dto);
+    if (!isValid)
+    {
+        return UnprocessableEntity(new
+        {
+            message = "Errores de validación",
+            errors = errors
+        });
+    }
+
+    var cliente = await _clienteService.CreateAsync(dto);
+    return CreatedAtAction(nameof(GetById), new { id = cliente.ClienteId }, cliente);
+}
+```
+
+## Service Layer Error Handling
+
+```csharp
+// Vantix.Application/Services/ClienteService.cs
+using Microsoft.EntityFrameworkCore;
+using Vantix.Application.DTOs;
+using Vantix.Domain.Entities.Models;
+using Vantix.Infrastructure.Persistence;
+
+namespace Vantix.Application.Services;
+
+public class ClienteService : IClienteService
+{
+    private readonly VantixDbContext _context;
+    private readonly ILogger<ClienteService> _logger;
+
+    public ClienteService(VantixDbContext context, ILogger<ClienteService> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    public async Task<ClienteDto> CreateAsync(CreateClienteDto dto)
+    {
+        // Check for duplicate
+        var exists = await _context.Clientes
+            .AnyAsync(c => c.DocumentoIdentidad == dto.DocumentoIdentidad);
+
+        if (exists)
+        {
+            _logger.LogWarning(
+                "Attempt to create duplicate client with DocumentoIdentidad: {DocumentoIdentidad}",
+                dto.DocumentoIdentidad);
+            
+            throw new InvalidOperationException(
+                $"Ya existe un cliente con el documento {dto.DocumentoIdentidad}");
+        }
+
+        try
+        {
+            var cliente = new Clientes
+            {
+                Nombre = dto.Nombre,
+                Apellido = dto.Apellido,
+                DocumentoIdentidad = dto.DocumentoIdentidad,
+                Email = dto.Email,
+                Telefono = dto.Telefono,
+                FechaRegistro = DateTime.Now,
+                Activo = true
+            };
+
+            _context.Clientes.Add(cliente);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Cliente created successfully: {ClienteId}",
+                cliente.ClienteId);
+
+            return MapToDto(cliente);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database error while creating cliente");
+            throw new InvalidOperationException(
+                "Error al guardar el cliente en la base de datos", ex);
+        }
+    }
+
+    public async Task<ClienteDto?> GetByIdAsync(int id)
+    {
+        try
+        {
+            var cliente = await _context.Clientes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ClienteId == id);
+
+            return cliente != null ? MapToDto(cliente) : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving cliente {ClienteId}", id);
+            throw;
+        }
+    }
+
+    private static ClienteDto MapToDto(Clientes cliente)
+    {
+        return new ClienteDto
+        {
+            ClienteId = cliente.ClienteId,
+            Nombre = cliente.Nombre,
+            Apellido = cliente.Apellido,
+            DocumentoIdentidad = cliente.DocumentoIdentidad,
+            Email = cliente.Email,
+            Telefono = cliente.Telefono
+        };
+    }
+}
+```
+
+## Logging Best Practices
+
+### Log Levels
+
+```csharp
+// Trace: Very detailed logs (rarely used)
+_logger.LogTrace("Entering method GetByIdAsync with id: {Id}", id);
+
+// Debug: Diagnostic information
+_logger.LogDebug("Query executed: {Query}", query);
+
+// Information: General flow of the application
+_logger.LogInformation("Cliente {ClienteId} created successfully", clienteId);
+
+// Warning: Unexpected but handled situations
+_logger.LogWarning("Cliente {ClienteId} not found", id);
+
+// Error: Errors and exceptions
+_logger.LogError(ex, "Failed to create cliente: {Message}", ex.Message);
+
+// Critical: Catastrophic failures
+_logger.LogCritical(ex, "Database connection lost");
+```
+
+### Structured Logging
+
+```csharp
+// Good: Structured logging with parameters
+_logger.LogInformation(
+    "Cliente created: Id={ClienteId}, Documento={DocumentoIdentidad}",
+    cliente.ClienteId,
+    cliente.DocumentoIdentidad);
+
+// Avoid: String interpolation
+_logger.LogInformation($"Cliente created: Id={cliente.ClienteId}");
+```
+
+### Configuration in appsettings.json
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Information",
+      "Vantix.Application": "Debug"
+    }
+  }
+}
+```
+
+## Database Error Handling
+
+### Handling DbUpdateException
+
+```csharp
+public async Task<ClienteDto> CreateAsync(CreateClienteDto dto)
+{
+    try
+    {
+        var cliente = new Clientes { /* ... */ };
+        _context.Clientes.Add(cliente);
+        await _context.SaveChangesAsync();
+        return MapToDto(cliente);
+    }
+    catch (DbUpdateException ex) when (ex.InnerException is SqlException sqlEx)
+    {
+        // SQL Server error codes
+        switch (sqlEx.Number)
+        {
+            case 2627: // Unique constraint violation
+            case 2601:
+                _logger.LogWarning("Duplicate key error: {Message}", sqlEx.Message);
+                throw new InvalidOperationException(
+                    "Ya existe un registro con los mismos datos únicos");
+
+            case 547: // Foreign key constraint violation
+                _logger.LogWarning("Foreign key violation: {Message}", sqlEx.Message);
+                throw new InvalidOperationException(
+                    "No se puede crear el registro debido a una referencia inválida");
+
+            default:
+                _logger.LogError(ex, "Database error: {ErrorNumber}", sqlEx.Number);
+                throw;
+        }
+    }
+}
+```
+
+### Connection Resilience
+
+```csharp
+// Add in Program.cs
+builder.Services.AddDbContext<VantixDbContext>(options =>
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("ventixDb"),
+        sqlOptions =>
+        {
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null);
+        }));
+```
+
+## Error Response Standards
+
+### Consistent Error Format
+
+```csharp
+public class ErrorResponse
+{
+    public string Message { get; set; } = null!;
+    public int StatusCode { get; set; }
+    public string? Detail { get; set; }
+    public Dictionary<string, string[]>? Errors { get; set; }
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+```
+
+### Example Responses
+
+```json
+// 404 Not Found
+{
+  "message": "Cliente no encontrado",
+  "statusCode": 404,
+  "clienteId": 123,
+  "timestamp": "2026-03-14T10:30:00Z"
+}
+
+// 400 Bad Request (Validation)
+{
+  "message": "Errores de validación",
+  "statusCode": 400,
+  "errors": {
+    "Nombre": ["El nombre es obligatorio"],
+    "Email": ["El email no tiene un formato válido"]
+  },
+  "timestamp": "2026-03-14T10:30:00Z"
+}
+
+// 409 Conflict
+{
+  "message": "Ya existe un cliente con el mismo número de documento",
+  "statusCode": 409,
+  "documentoIdentidad": "12345678",
+  "timestamp": "2026-03-14T10:30:00Z"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Coding Standards" icon="code" href="/development/coding-standards">
+    Review coding conventions and best practices
+  </Card>
+  <Card title="Adding Entities" icon="plus" href="/development/adding-entities">
+    Learn how to add new entities
+  </Card>
+  <Card title="Setup Guide" icon="laptop-code" href="/development/setup">
+    Set up your development environment
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Explore the API documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,253 @@
+---
+title: 'Development Setup'
+description: 'Set up your local development environment for the Vantix Sales API'
+icon: 'laptop-code'
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following tools installed on your development machine:
+
+<CardGroup cols={2}>
+  <Card title=".NET 10 SDK" icon="microsoft">
+    Required for building and running the application
+  </Card>
+  <Card title="SQL Server" icon="database">
+    Database server (SQL Server 2019 or later recommended)
+  </Card>
+  <Card title="Git" icon="git-alt">
+    Version control system
+  </Card>
+  <Card title="IDE" icon="code">
+    Visual Studio 2022, Rider, or VS Code
+  </Card>
+</CardGroup>
+
+### Recommended IDEs
+
+- **Visual Studio 2022** (v17.12 or later) - Full-featured IDE with excellent .NET support
+- **JetBrains Rider** - Cross-platform .NET IDE
+- **Visual Studio Code** - Lightweight editor with C# extensions
+
+## Getting Started
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Vantix Sales API repository to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd SistemasVentasV2Angular
+    ```
+  </Step>
+
+  <Step title="Verify .NET Installation">
+    Confirm that .NET 10 SDK is installed:
+
+    ```bash
+    dotnet --version
+    ```
+
+    You should see version `10.0.x` or later.
+  </Step>
+
+  <Step title="Restore Dependencies">
+    Restore NuGet packages for all projects in the solution:
+
+    ```bash
+    dotnet restore
+    ```
+
+    This will install all required packages including:
+    - Entity Framework Core 10.0.3
+    - ASP.NET Core OpenAPI 10.0.3
+    - SQL Server provider for EF Core
+  </Step>
+
+  <Step title="Configure Database Connection">
+    Update the connection string in `Vantix.Api/appsettings.Development.json`:
+
+    ```json
+    {
+      "ConnectionStrings": {
+        "ventixDb": "Server=YOUR_SERVER;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+    ```
+
+    <Note>
+      Replace `YOUR_SERVER` with your SQL Server instance name. For local development, this is typically `localhost` or `.\SQLEXPRESS`.
+    </Note>
+  </Step>
+
+  <Step title="Build the Solution">
+    Build all projects to ensure everything compiles correctly:
+
+    ```bash
+    dotnet build
+    ```
+
+    The solution contains 4 projects:
+    - `Vantix.Api` - Web API project
+    - `Vantix.Application` - Application layer
+    - `Vantix.Domain` - Domain entities
+    - `Vantix.Infrastructure` - Data access layer
+  </Step>
+
+  <Step title="Run the Application">
+    Start the API in development mode:
+
+    ```bash
+    cd Vantix.Api
+    dotnet run
+    ```
+
+    The API will start on `https://localhost:5001` (or the port shown in the console output).
+  </Step>
+</Steps>
+
+## Accessing the API Documentation
+
+The Vantix Sales API uses **OpenAPI** for automatic API documentation.
+
+### Development Mode
+
+When running in development mode, the OpenAPI endpoint is automatically enabled:
+
+```csharp
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+```
+
+### Accessing Swagger UI
+
+<Info>
+  The OpenAPI specification is available at `/openapi/v1.json` when running in development mode.
+</Info>
+
+To view the interactive API documentation:
+
+1. **Install Scalar or Swagger UI** (optional middleware)
+2. **Access the OpenAPI JSON** directly at: `https://localhost:5001/openapi/v1.json`
+3. **Use external tools** like [Swagger Editor](https://editor.swagger.io/) or Postman to import the spec
+
+### Alternative: Add Swagger UI
+
+To add Swagger UI to your development environment:
+
+```bash
+cd Vantix.Api
+dotnet add package Swashbuckle.AspNetCore
+```
+
+Then update `Program.cs`:
+
+```csharp
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+```
+
+Swagger UI will be available at `https://localhost:5001/swagger`.
+
+## Project Structure
+
+```
+SistemasVentasV2Angular/
+├── Vantix.Api/              # Web API layer (Controllers, Program.cs)
+├── Vantix.Application/      # Application business logic
+├── Vantix.Domain/           # Domain entities and models
+├── Vantix.Infrastructure/   # Data access and persistence
+│   ├── Entities/Models/     # Generated entity classes
+│   └── Persistence/         # DbContext
+└── scaffold.bat             # Database scaffolding script
+```
+
+## Development Workflow
+
+<Note>
+  This project follows a **database-first approach** with Entity Framework Core. Database changes are made in SQL Server first, then entity classes are generated using the scaffolding script.
+</Note>
+
+### Typical Development Flow
+
+1. **Make database changes** in SQL Server
+2. **Run scaffold.bat** to regenerate entity models
+3. **Implement business logic** in Application layer
+4. **Create/update controllers** in API layer
+5. **Test endpoints** using Swagger/Postman
+
+## Environment Variables
+
+### appsettings.Development.json
+
+The development configuration includes:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "ventixDb": "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "Jwt": {
+    "Key": "Esta_Es_Una_Llave_Super_Secreta_De_Al_Menos_32_Caracteres_12345!"
+  }
+}
+```
+
+<Warning>
+  Never commit sensitive connection strings or JWT keys to version control. Use user secrets or environment variables for production credentials.
+</Warning>
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot connect to SQL Server">
+    - Verify SQL Server is running
+    - Check the connection string format
+    - Ensure `TrustServerCertificate=True` is set for local development
+    - Test connection using SQL Server Management Studio
+  </Accordion>
+
+  <Accordion title="Build errors after pulling changes">
+    - Run `dotnet clean` followed by `dotnet restore`
+    - Delete `bin` and `obj` folders
+    - Rebuild the solution
+  </Accordion>
+
+  <Accordion title="Entity Framework tools not found">
+    Install EF Core tools globally:
+    ```bash
+    dotnet tool install --global dotnet-ef
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Migrations" icon="database" href="/development/database-migrations">
+    Learn how to work with Entity Framework scaffolding
+  </Card>
+  <Card title="Adding Entities" icon="plus" href="/development/adding-entities">
+    Step-by-step guide to adding new entities
+  </Card>
+  <Card title="Coding Standards" icon="code" href="/development/coding-standards">
+    Follow project coding conventions
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/development/error-handling">
+    Implement proper error handling patterns
+  </Card>
+</CardGroup>

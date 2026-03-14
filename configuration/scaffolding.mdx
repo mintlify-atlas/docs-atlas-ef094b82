@@ -1,0 +1,390 @@
+---
+title: 'Database Scaffolding'
+description: 'Generate Entity Framework models from your SQL Server database using scaffold.bat'
+icon: 'wand-magic-sparkles'
+---
+
+## Overview
+
+Vantix uses a **database-first** approach with Entity Framework Core scaffolding. The `scaffold.bat` script automates the generation of entity models and DbContext from an existing SQL Server database.
+
+## The Scaffold Script
+
+From `scaffold.bat`:
+
+```batch
+@echo off
+echo 🚀 Generando modelos en Domain e Infraestructura...
+
+dotnet ef dbcontext scaffold "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;" Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --force ^
+  --no-pluralize ^
+  --namespace Vantix.Domain.Entities.Models ^
+  --context-namespace Vantix.Infrastructure.Persistence
+
+echo ✅ ¡Revisa tus carpetas ahora!
+pause
+```
+
+## Scaffold Parameters Explained
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Connection String | `Server=GARIEN-DESKTOP;...` | SQL Server database to scaffold from |
+| Provider | `Microsoft.EntityFrameworkCore.SqlServer` | Database provider for SQL Server |
+| `--project` | `Vantix.Infrastructure` | Project where DbContext is generated |
+| `--output-dir` | `../Vantix.Domain/Entities/Models` | Directory for entity classes |
+| `--context-dir` | `Persistence` | Directory for DbContext (relative to project) |
+| `--context` | `VantixDbContext` | Name of the generated DbContext class |
+| `--force` | | Overwrite existing files without prompting |
+| `--no-pluralize` | | Keep table names as-is (don't pluralize) |
+| `--namespace` | `Vantix.Domain.Entities.Models` | Namespace for entity classes |
+| `--context-namespace` | `Vantix.Infrastructure.Persistence` | Namespace for DbContext |
+
+<Info>
+The `--force` flag will overwrite existing files. Be careful if you've made manual changes to generated models.
+</Info>
+
+## When to Use Scaffolding
+
+Run the scaffold script when:
+
+<CardGroup cols={2}>
+  <Card title="Initial Setup" icon="rocket">
+    First time generating models from an existing database
+  </Card>
+  
+  <Card title="Schema Changes" icon="table">
+    After adding new tables to the database
+  </Card>
+  
+  <Card title="Column Updates" icon="columns">
+    When modifying table columns or constraints
+  </Card>
+  
+  <Card title="Relationship Changes" icon="link">
+    After updating foreign key relationships
+  </Card>
+</CardGroup>
+
+## Database-First Workflow
+
+<Steps>
+  <Step title="Design Database Schema">
+    Create or modify your database schema in SQL Server:
+
+    ```sql
+    CREATE TABLE Clientes (
+        ClienteId INT PRIMARY KEY IDENTITY(1,1),
+        Nombre NVARCHAR(100) NOT NULL,
+        Apellido NVARCHAR(100) NOT NULL,
+        DocumentoIdentidad NVARCHAR(20) UNIQUE NOT NULL,
+        Email NVARCHAR(150),
+        Telefono NVARCHAR(20),
+        Activo BIT DEFAULT 1,
+        FechaRegistro DATETIME DEFAULT GETDATE()
+    );
+    ```
+  </Step>
+
+  <Step title="Update Connection String (Optional)">
+    If your database server or name is different, edit `scaffold.bat`:
+
+    ```batch
+    dotnet ef dbcontext scaffold "Server=YOUR_SERVER;Database=YOUR_DB;..." ...
+    ```
+
+    <Tip>
+    Consider using a configuration file instead of hardcoding the connection string. See the Database Configuration guide.
+    </Tip>
+  </Step>
+
+  <Step title="Run Scaffold Script">
+    Execute the batch file from your project root:
+
+    ```bash
+    # From the solution root directory
+    .\scaffold.bat
+    ```
+
+    You'll see output like:
+    ```
+    🚀 Generando modelos en Domain e Infraestructura...
+    Build started...
+    Build succeeded.
+    ✅ ¡Revisa tus carpetas ahora!
+    ```
+  </Step>
+
+  <Step title="Review Generated Files">
+    Check the generated files:
+
+    - **Entities**: `Vantix.Domain/Entities/Models/Clientes.cs`
+    - **DbContext**: `Vantix.Infrastructure/Persistence/VantixDbContext.cs`
+  </Step>
+
+  <Step title="Remove Hardcoded Connection String">
+    <Warning>
+    The scaffolding process generates a hardcoded connection string in `VantixDbContext.cs`. Remove it and use configuration instead.
+    </Warning>
+
+    Delete or comment out the `OnConfiguring` method:
+
+    ```csharp
+    // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    //     => optionsBuilder.UseSqlServer("...");
+    ```
+  </Step>
+</Steps>
+
+## Generated Output
+
+### Entity Model Example
+
+The script generates entity classes like `Clientes.cs` in `Vantix.Domain/Entities/Models`:
+
+```csharp
+using System;
+using System.Collections.Generic;
+
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+    public string Nombre { get; set; } = null!;
+    public string Apellido { get; set; } = null!;
+    public string DocumentoIdentidad { get; set; } = null!;
+    public string? Email { get; set; }
+    public string? Telefono { get; set; }
+    public bool? Activo { get; set; }
+    public DateTime? FechaRegistro { get; set; }
+}
+```
+
+### DbContext Example
+
+From the actual `VantixDbContext.cs:8-48`:
+
+```csharp
+namespace Vantix.Infrastructure.Persistence;
+
+public partial class VantixDbContext : DbContext
+{
+    public VantixDbContext()
+    {
+    }
+
+    public VantixDbContext(DbContextOptions<VantixDbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<Clientes> Clientes { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Clientes>(entity =>
+        {
+            entity.HasKey(e => e.ClienteId).HasName("PK__Clientes__71ABD0872790C1F1");
+
+            entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A").IsUnique();
+
+            entity.Property(e => e.Activo).HasDefaultValue(true);
+            entity.Property(e => e.Apellido).HasMaxLength(100);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(150);
+            entity.Property(e => e.FechaRegistro)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Nombre).HasMaxLength(100);
+            entity.Property(e => e.Telefono).HasMaxLength(20);
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+```
+
+## Customizing the Scaffold Process
+
+### Scaffold Specific Tables
+
+To generate models for specific tables only:
+
+```batch
+dotnet ef dbcontext scaffold "Server=..." Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --table Clientes ^
+  --table Ventas ^
+  --table Productos
+```
+
+### Use Configuration File for Connection String
+
+Create a more secure scaffold script that reads from configuration:
+
+```batch
+@echo off
+echo 🚀 Generando modelos desde configuración...
+
+dotnet ef dbcontext scaffold "Name=ConnectionStrings:ventixDb" Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --startup-project Vantix.Api ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --force ^
+  --no-pluralize ^
+  --namespace Vantix.Domain.Entities.Models ^
+  --context-namespace Vantix.Infrastructure.Persistence
+
+echo ✅ ¡Modelos generados!
+pause
+```
+
+<Tip>
+Using `Name=ConnectionStrings:ventixDb` reads the connection string from `appsettings.json`, avoiding hardcoded credentials.
+</Tip>
+
+### Preserve Manual Changes
+
+Use partial classes to extend generated models without losing changes:
+
+```csharp
+// Clientes.Custom.cs - Your custom code that won't be overwritten
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public string NombreCompleto => $"{Nombre} {Apellido}";
+    
+    public bool EsActivo() => Activo ?? false;
+}
+```
+
+## Required Packages
+
+From `Vantix.Infrastructure.csproj:10-19`, these packages are required for scaffolding:
+
+```xml
+<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+</PackageReference>
+<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.3">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+</PackageReference>
+```
+
+<Info>
+All packages are using Entity Framework Core 10.0.3, compatible with .NET 10.0.
+</Info>
+
+## Troubleshooting
+
+### Build Failed Error
+
+```bash
+Build FAILED.
+```
+
+**Solution**: Ensure your project compiles before scaffolding:
+```bash
+dotnet build Vantix.Infrastructure
+```
+
+### Connection Failed
+
+```bash
+A network-related or instance-specific error occurred...
+```
+
+**Solution**: 
+1. Verify SQL Server is running
+2. Check connection string server name
+3. Ensure Windows Authentication is enabled or provide credentials
+
+### No Tables Found
+
+```bash
+No tables were found in the database.
+```
+
+**Solution**:
+1. Verify you're connecting to the correct database
+2. Check that tables exist in the database
+3. Ensure the database user has read permissions
+
+### Namespace Conflicts
+
+```bash
+The type or namespace name already exists...
+```
+
+**Solution**: Use `--force` to overwrite existing files, or delete old generated files first.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-branch">
+    Commit scaffolding scripts to version control so the team uses the same configuration.
+  </Card>
+  
+  <Card title="Documentation" icon="book">
+    Document any manual changes to generated files that need to be preserved.
+  </Card>
+  
+  <Card title="Partial Classes" icon="puzzle-piece">
+    Use partial classes for custom logic to avoid losing changes during re-scaffolding.
+  </Card>
+  
+  <Card title="Review Changes" icon="eye">
+    Always review generated code changes before committing to understand schema modifications.
+  </Card>
+</CardGroup>
+
+<Warning>
+**Important Reminder**
+
+After scaffolding, always remove the hardcoded connection string from `VantixDbContext.cs` and configure it properly in `Program.cs` using dependency injection.
+</Warning>
+
+## Advanced: Linux/macOS Script
+
+Create `scaffold.sh` for cross-platform support:
+
+```bash
+#!/bin/bash
+echo "🚀 Generating models in Domain and Infrastructure..."
+
+dotnet ef dbcontext scaffold "Server=localhost;Database=VantixV1;User Id=sa;Password=YourPassword;TrustServerCertificate=true" Microsoft.EntityFrameworkCore.SqlServer \
+  --project Vantix.Infrastructure \
+  --output-dir ../Vantix.Domain/Entities/Models \
+  --context-dir Persistence \
+  --context VantixDbContext \
+  --force \
+  --no-pluralize \
+  --namespace Vantix.Domain.Entities.Models \
+  --context-namespace Vantix.Infrastructure.Persistence
+
+echo "✅ Check your folders now!"
+```
+
+Make it executable:
+```bash
+chmod +x scaffold.sh
+./scaffold.sh
+```

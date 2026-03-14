@@ -1,0 +1,628 @@
+---
+title: 'Coding Standards'
+description: 'C# coding conventions and project organization standards for the Vantix Sales API'
+icon: 'code'
+---
+
+## Overview
+
+This guide outlines the coding standards and conventions used in the Vantix Sales API project. Following these standards ensures consistency, maintainability, and collaboration across the codebase.
+
+## Project Organization
+
+The Vantix Sales API follows **Clean Architecture** principles with clear separation of concerns:
+
+```
+SistemasVentasV2Angular/
+├── Vantix.Api/              # Presentation Layer
+│   ├── Controllers/         # API endpoints
+│   ├── Program.cs           # Application entry point
+│   └── appsettings.json     # Configuration
+├── Vantix.Application/      # Application Layer
+│   ├── Services/            # Business logic
+│   ├── DTOs/                # Data transfer objects
+│   └── Interfaces/          # Service interfaces
+├── Vantix.Domain/           # Domain Layer
+│   └── Entities/Models/     # Domain entities (generated)
+└── Vantix.Infrastructure/   # Infrastructure Layer
+    ├── Persistence/         # DbContext
+    └── Entities/Models/     # EF Core entity mappings
+```
+
+### Layer Responsibilities
+
+<CardGroup cols={2}>
+  <Card title="Vantix.Api" icon="globe">
+    **Presentation Layer**
+    
+    - HTTP endpoints (Controllers)
+    - Request/response handling
+    - Authentication/Authorization
+    - API documentation
+    - Middleware configuration
+  </Card>
+  <Card title="Vantix.Application" icon="gears">
+    **Application Layer**
+    
+    - Business logic
+    - Service interfaces
+    - DTOs and mapping
+    - Validation rules
+    - Application workflows
+  </Card>
+  <Card title="Vantix.Domain" icon="cube">
+    **Domain Layer**
+    
+    - Entity classes
+    - Domain models
+    - Business rules
+    - Domain events
+    - Value objects
+  </Card>
+  <Card title="Vantix.Infrastructure" icon="database">
+    **Infrastructure Layer**
+    
+    - DbContext
+    - Database access
+    - External services
+    - File system access
+    - Caching
+  </Card>
+</CardGroup>
+
+## C# Naming Conventions
+
+### General Rules
+
+| Element | Convention | Example |
+|---------|-----------|----------|
+| Namespace | PascalCase | `Vantix.Domain.Entities.Models` |
+| Class | PascalCase | `ProductoService` |
+| Interface | PascalCase with `I` prefix | `IProductoService` |
+| Method | PascalCase | `GetByIdAsync()` |
+| Property | PascalCase | `ProductoId` |
+| Private field | camelCase with `_` prefix | `_context` |
+| Parameter | camelCase | `productoId` |
+| Local variable | camelCase | `producto` |
+| Constant | PascalCase | `MaxRetryCount` |
+
+### Examples from the Codebase
+
+#### Entity Class (Generated)
+
+```csharp
+using System;
+using System.Collections.Generic;
+
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+    public string Nombre { get; set; } = null!;
+    public string Apellido { get; set; } = null!;
+    public string DocumentoIdentidad { get; set; } = null!;
+    public string? Email { get; set; }
+    public string? Telefono { get; set; }
+    public DateTime? FechaRegistro { get; set; }
+    public bool? Activo { get; set; }
+}
+```
+
+#### DbContext Class
+
+```csharp
+using System;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+using Vantix.Domain.Entities.Models;
+
+namespace Vantix.Infrastructure.Persistence;
+
+public partial class VantixDbContext : DbContext
+{
+    public VantixDbContext()
+    {
+    }
+
+    public VantixDbContext(DbContextOptions<VantixDbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<Clientes> Clientes { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Clientes>(entity =>
+        {
+            entity.HasKey(e => e.ClienteId).HasName("PK__Clientes__71ABD0872790C1F1");
+            entity.Property(e => e.Nombre).HasMaxLength(100);
+            entity.Property(e => e.Apellido).HasMaxLength(100);
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+```
+
+#### Service Interface and Implementation
+
+```csharp
+namespace Vantix.Application.Services;
+
+public interface IClienteService
+{
+    Task<List<ClienteDto>> GetAllAsync();
+    Task<ClienteDto?> GetByIdAsync(int id);
+    Task<ClienteDto> CreateAsync(CreateClienteDto dto);
+    Task<ClienteDto?> UpdateAsync(int id, UpdateClienteDto dto);
+    Task<bool> DeleteAsync(int id);
+}
+
+public class ClienteService : IClienteService
+{
+    private readonly VantixDbContext _context;
+    private readonly ILogger<ClienteService> _logger;
+
+    public ClienteService(
+        VantixDbContext context,
+        ILogger<ClienteService> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    public async Task<List<ClienteDto>> GetAllAsync()
+    {
+        return await _context.Clientes
+            .Where(c => c.Activo == true)
+            .Select(c => new ClienteDto
+            {
+                ClienteId = c.ClienteId,
+                Nombre = c.Nombre,
+                Apellido = c.Apellido,
+                DocumentoIdentidad = c.DocumentoIdentidad,
+                Email = c.Email,
+                Telefono = c.Telefono
+            })
+            .ToListAsync();
+    }
+
+    public async Task<ClienteDto?> GetByIdAsync(int id)
+    {
+        var cliente = await _context.Clientes.FindAsync(id);
+        if (cliente == null) return null;
+
+        return new ClienteDto
+        {
+            ClienteId = cliente.ClienteId,
+            Nombre = cliente.Nombre,
+            Apellido = cliente.Apellido,
+            DocumentoIdentidad = cliente.DocumentoIdentidad,
+            Email = cliente.Email,
+            Telefono = cliente.Telefono
+        };
+    }
+
+    // Additional methods...
+}
+```
+
+## File Organization
+
+### Namespace Structure
+
+Namespaces should match the folder structure:
+
+```csharp
+// File: Vantix.Application/Services/ProductoService.cs
+namespace Vantix.Application.Services;
+
+// File: Vantix.Application/DTOs/ProductoDto.cs
+namespace Vantix.Application.DTOs;
+
+// File: Vantix.Api/Controllers/ProductosController.cs
+namespace Vantix.Api.Controllers;
+```
+
+### File-Scoped Namespaces
+
+Use file-scoped namespace declarations (C# 10+):
+
+```csharp
+// Good (file-scoped)
+namespace Vantix.Application.Services;
+
+public class ProductoService
+{
+    // ...
+}
+
+// Avoid (block-scoped)
+namespace Vantix.Application.Services
+{
+    public class ProductoService
+    {
+        // ...
+    }
+}
+```
+
+### One Class Per File
+
+Each class should be in its own file with a matching filename:
+
+- `ProductoService.cs` → `ProductoService` class
+- `ClienteDto.cs` → `ClienteDto` class
+- `ProductosController.cs` → `ProductosController` class
+
+**Exception:** Related DTOs can be grouped:
+
+```csharp
+// ProductoDtos.cs
+namespace Vantix.Application.DTOs;
+
+public class ProductoDto { /* ... */ }
+public class CreateProductoDto { /* ... */ }
+public class UpdateProductoDto { /* ... */ }
+```
+
+## Code Style
+
+### Indentation and Spacing
+
+- Use **4 spaces** for indentation (not tabs)
+- One statement per line
+- One blank line between methods
+- Braces on new lines (Allman style)
+
+```csharp
+// Good
+public async Task<ClienteDto> CreateAsync(CreateClienteDto dto)
+{
+    var cliente = new Clientes
+    {
+        Nombre = dto.Nombre,
+        Apellido = dto.Apellido
+    };
+
+    _context.Clientes.Add(cliente);
+    await _context.SaveChangesAsync();
+
+    return MapToDto(cliente);
+}
+
+// Avoid
+public async Task<ClienteDto> CreateAsync(CreateClienteDto dto) {
+  var cliente = new Clientes { Nombre = dto.Nombre, Apellido = dto.Apellido };
+  _context.Clientes.Add(cliente); await _context.SaveChangesAsync();
+  return MapToDto(cliente);
+}
+```
+
+### Using Directives
+
+- Place `using` directives at the top of the file
+- Order: System namespaces first, then third-party, then project namespaces
+- Remove unused usings
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Vantix.Application.DTOs;
+using Vantix.Domain.Entities.Models;
+using Vantix.Infrastructure.Persistence;
+
+namespace Vantix.Application.Services;
+```
+
+### Implicit Usings
+
+The project uses implicit usings (enabled in .csproj):
+
+```xml
+<PropertyGroup>
+  <TargetFramework>net10.0</TargetFramework>
+  <Nullable>enable</Nullable>
+  <ImplicitUsings>enable</ImplicitUsings>
+</PropertyGroup>
+```
+
+This automatically includes common namespaces like:
+- `System`
+- `System.Collections.Generic`
+- `System.Linq`
+- `System.Threading.Tasks`
+
+## Dependency Injection
+
+### Constructor Injection
+
+Always use constructor injection for dependencies:
+
+```csharp
+public class ProductoService : IProductoService
+{
+    private readonly VantixDbContext _context;
+    private readonly ILogger<ProductoService> _logger;
+    private readonly IMapper _mapper;
+
+    public ProductoService(
+        VantixDbContext context,
+        ILogger<ProductoService> logger,
+        IMapper mapper)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+    }
+}
+```
+
+### Service Registration
+
+Register services in `Program.cs`:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Framework services
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
+
+// Database
+builder.Services.AddDbContext<VantixDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("ventixDb")));
+
+// Application services
+builder.Services.AddScoped<IClienteService, ClienteService>();
+builder.Services.AddScoped<IProductoService, ProductoService>();
+
+// Infrastructure services
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+builder.Services.AddTransient<IEmailService, EmailService>();
+```
+
+### Service Lifetimes
+
+| Lifetime | When to Use | Example |
+|----------|-------------|----------|
+| **Scoped** | Per-request services, DbContext | `AddScoped<IProductoService, ProductoService>()` |
+| **Transient** | Lightweight, stateless services | `AddTransient<IEmailService, EmailService>()` |
+| **Singleton** | Shared state, expensive to create | `AddSingleton<ICacheService, RedisCacheService>()` |
+
+## Async/Await Patterns
+
+### Always Use Async for I/O
+
+All database operations and I/O-bound operations should be asynchronous:
+
+```csharp
+// Good
+public async Task<ClienteDto?> GetByIdAsync(int id)
+{
+    var cliente = await _context.Clientes.FindAsync(id);
+    return cliente != null ? MapToDto(cliente) : null;
+}
+
+// Avoid
+public ClienteDto? GetById(int id)
+{
+    var cliente = _context.Clientes.Find(id);
+    return cliente != null ? MapToDto(cliente) : null;
+}
+```
+
+### Naming Convention
+
+Asynchronous methods should have the `Async` suffix:
+
+```csharp
+public interface IClienteService
+{
+    Task<List<ClienteDto>> GetAllAsync();
+    Task<ClienteDto?> GetByIdAsync(int id);
+    Task<ClienteDto> CreateAsync(CreateClienteDto dto);
+    Task<bool> DeleteAsync(int id);
+}
+```
+
+### Avoid Async Void
+
+Never use `async void` except for event handlers:
+
+```csharp
+// Good
+public async Task ProcessAsync()
+{
+    await SomeOperationAsync();
+}
+
+// Avoid (except for event handlers)
+public async void Process()
+{
+    await SomeOperationAsync();
+}
+```
+
+## Nullable Reference Types
+
+The project has nullable reference types enabled:
+
+```xml
+<Nullable>enable</Nullable>
+```
+
+### Null Handling
+
+```csharp
+// Non-nullable (must have a value)
+public string Nombre { get; set; } = null!;
+
+// Nullable (can be null)
+public string? Email { get; set; }
+
+// Null checking
+if (cliente.Email != null)
+{
+    SendEmail(cliente.Email);
+}
+
+// Null-coalescing
+var email = cliente.Email ?? "no-email@example.com";
+
+// Null-conditional
+var length = cliente.Email?.Length;
+```
+
+## Entity Framework Best Practices
+
+### Query Optimization
+
+```csharp
+// Good: Use projections to select only needed columns
+public async Task<List<ClienteDto>> GetAllAsync()
+{
+    return await _context.Clientes
+        .Where(c => c.Activo == true)
+        .Select(c => new ClienteDto
+        {
+            ClienteId = c.ClienteId,
+            Nombre = c.Nombre,
+            Apellido = c.Apellido
+        })
+        .ToListAsync();
+}
+
+// Avoid: Loading entire entities when only some fields are needed
+public async Task<List<ClienteDto>> GetAllAsync()
+{
+    var clientes = await _context.Clientes.ToListAsync();
+    return clientes.Select(c => new ClienteDto
+    {
+        ClienteId = c.ClienteId,
+        Nombre = c.Nombre,
+        Apellido = c.Apellido
+    }).ToList();
+}
+```
+
+### Tracking Behavior
+
+```csharp
+// For read-only queries, disable tracking
+public async Task<ClienteDto?> GetByIdAsync(int id)
+{
+    return await _context.Clientes
+        .AsNoTracking()
+        .Where(c => c.ClienteId == id)
+        .Select(c => new ClienteDto { /* ... */ })
+        .FirstOrDefaultAsync();
+}
+
+// For updates, tracking is needed
+public async Task<ClienteDto?> UpdateAsync(int id, UpdateClienteDto dto)
+{
+    var cliente = await _context.Clientes.FindAsync(id);
+    if (cliente == null) return null;
+
+    cliente.Nombre = dto.Nombre ?? cliente.Nombre;
+    await _context.SaveChangesAsync();
+    
+    return MapToDto(cliente);
+}
+```
+
+## Comments and Documentation
+
+### XML Documentation
+
+Add XML comments for public APIs:
+
+```csharp
+/// <summary>
+/// Gets all active clients from the database.
+/// </summary>
+/// <returns>A list of client DTOs.</returns>
+public async Task<List<ClienteDto>> GetAllAsync()
+{
+    // Implementation
+}
+
+/// <summary>
+/// Creates a new client.
+/// </summary>
+/// <param name="dto">The client creation data.</param>
+/// <returns>The created client DTO.</returns>
+/// <exception cref="ArgumentNullException">Thrown when dto is null.</exception>
+public async Task<ClienteDto> CreateAsync(CreateClienteDto dto)
+{
+    // Implementation
+}
+```
+
+### Code Comments
+
+```csharp
+// Use comments to explain WHY, not WHAT
+
+// Good: Explains the reason
+// Soft delete to preserve historical records
+entity.Activo = false;
+
+// Avoid: States the obvious
+// Set Activo to false
+entity.Activo = false;
+```
+
+## Configuration Standards
+
+### Project Files (.csproj)
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+  </ItemGroup>
+</Project>
+```
+
+### appsettings.json
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "ventixDb": "Server=localhost;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "AllowedHosts": "*"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/development/error-handling">
+    Learn error handling patterns
+  </Card>
+  <Card title="Adding Entities" icon="plus" href="/development/adding-entities">
+    Add new entities to the system
+  </Card>
+</CardGroup>

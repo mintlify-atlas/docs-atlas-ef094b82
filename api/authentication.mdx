@@ -1,0 +1,359 @@
+---
+title: 'Authentication'
+description: 'Authentication and authorization in the Vantix Sales API'
+icon: 'lock'
+---
+
+## Overview
+
+The Vantix Sales API implements ASP.NET Core's built-in authorization framework to secure endpoints and protect sensitive resources. Authentication ensures that only authorized users can access protected API endpoints.
+
+## Current Authentication Status
+
+The API has authorization middleware configured in the request pipeline:
+
+```csharp Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+```
+
+The `app.UseAuthorization()` middleware is enabled, which enforces authorization policies on protected endpoints.
+
+<Note>
+  Authentication middleware (e.g., JWT Bearer, API Keys) needs to be configured before authorization can be fully utilized.
+</Note>
+
+## Implementing Authentication
+
+To implement authentication in the Vantix API, you can choose from several approaches:
+
+### JWT Bearer Authentication (Recommended)
+
+JSON Web Tokens (JWT) are the recommended approach for API authentication.
+
+#### 1. Install Required Package
+
+```bash
+dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer
+```
+
+#### 2. Configure JWT in Program.cs
+
+```csharp
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add JWT Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+app.UseHttpsRedirection();
+app.UseAuthentication(); // Add this before UseAuthorization
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+```
+
+#### 3. Configure appsettings.json
+
+```json
+{
+  "Jwt": {
+    "Key": "YourSuperSecretKeyThatIsAtLeast32CharactersLong",
+    "Issuer": "VantixApi",
+    "Audience": "VantixClients",
+    "ExpiryMinutes": 60
+  }
+}
+```
+
+<Warning>
+  Never commit JWT secret keys to source control. Use environment variables or Azure Key Vault in production.
+</Warning>
+
+### API Key Authentication
+
+For simpler scenarios, you can implement API key-based authentication:
+
+```csharp
+public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+{
+    private const string ApiKeyHeaderName = "X-API-Key";
+    
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        if (!Request.Headers.ContainsKey(ApiKeyHeaderName))
+        {
+            return AuthenticateResult.Fail("API Key not provided");
+        }
+
+        string apiKey = Request.Headers[ApiKeyHeaderName];
+        
+        // Validate API key against your storage
+        if (!IsValidApiKey(apiKey))
+        {
+            return AuthenticateResult.Fail("Invalid API Key");
+        }
+
+        var claims = new[] { new Claim(ClaimTypes.Name, "ApiUser") };
+        var identity = new ClaimsIdentity(claims, Scheme.Name);
+        var principal = new ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, Scheme.Name);
+
+        return AuthenticateResult.Success(ticket);
+    }
+}
+```
+
+## Authorization Patterns
+
+### Protecting Endpoints
+
+Use the `[Authorize]` attribute to protect controller endpoints:
+
+```csharp
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Vantix.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize] // Require authentication for all endpoints
+    public class CustomersController : ControllerBase
+    {
+        [HttpGet]
+        public IActionResult GetCustomers()
+        {
+            // Only authenticated users can access
+            return Ok();
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")] // Require Admin role
+        public IActionResult CreateCustomer()
+        {
+            // Only Admin users can create customers
+            return Ok();
+        }
+
+        [HttpGet("{id}")]
+        [AllowAnonymous] // Public endpoint
+        public IActionResult GetCustomer(int id)
+        {
+            // Anyone can access this endpoint
+            return Ok();
+        }
+    }
+}
+```
+
+### Role-Based Authorization
+
+```csharp
+[Authorize(Roles = "Admin,Manager")]
+public IActionResult DeleteCustomer(int id)
+{
+    // Only Admin or Manager roles can delete
+    return NoContent();
+}
+```
+
+### Policy-Based Authorization
+
+Define custom authorization policies:
+
+```csharp
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdminRole", policy =>
+        policy.RequireRole("Admin"));
+    
+    options.AddPolicy("CustomerManagement", policy =>
+        policy.RequireClaim("Permission", "customers.write"));
+});
+```
+
+Use in controllers:
+
+```csharp
+[Authorize(Policy = "CustomerManagement")]
+public IActionResult UpdateCustomer(int id)
+{
+    return Ok();
+}
+```
+
+## Making Authenticated Requests
+
+### Using JWT Bearer Token
+
+```bash
+curl -X GET https://localhost:5001/api/customers \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json"
+```
+
+### Using API Key
+
+```bash
+curl -X GET https://localhost:5001/api/customers \
+  -H "X-API-Key: your-api-key-here" \
+  -H "Content-Type: application/json"
+```
+
+### JavaScript Example
+
+```javascript
+const response = await fetch('https://localhost:5001/api/customers', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+
+### C# Example
+
+```csharp
+using System.Net.Http.Headers;
+
+var client = new HttpClient();
+client.DefaultRequestHeaders.Authorization = 
+    new AuthenticationHeaderValue("Bearer", token);
+
+var response = await client.GetAsync("https://localhost:5001/api/customers");
+var data = await response.Content.ReadAsStringAsync();
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use HTTPS Only">
+    The API enforces HTTPS redirection to protect tokens in transit:
+    
+    ```csharp
+    app.UseHttpsRedirection();
+    ```
+    
+    All authentication tokens should only be transmitted over secure connections.
+  </Accordion>
+
+  <Accordion title="Secure Token Storage">
+    - Never store tokens in localStorage (vulnerable to XSS)
+    - Use secure, httpOnly cookies for web applications
+    - Store tokens securely in mobile app keychain/keystore
+    - Implement token refresh mechanisms
+  </Accordion>
+
+  <Accordion title="Token Expiration">
+    - Set appropriate token expiration times (e.g., 1 hour for access tokens)
+    - Implement refresh tokens for long-lived sessions
+    - Validate token expiration on every request
+    
+    ```csharp
+    ValidateLifetime = true,
+    ClockSkew = TimeSpan.Zero // No tolerance for expired tokens
+    ```
+  </Accordion>
+
+  <Accordion title="Secret Management">
+    - Use environment variables for JWT secrets
+    - Consider Azure Key Vault or AWS Secrets Manager
+    - Rotate secrets regularly
+    - Never commit secrets to source control
+    
+    ```csharp
+    IssuerSigningKey = new SymmetricSecurityKey(
+        Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("JWT_KEY")))
+    ```
+  </Accordion>
+
+  <Accordion title="Rate Limiting">
+    Implement rate limiting to prevent brute force attacks:
+    
+    ```bash
+    dotnet add package AspNetCoreRateLimit
+    ```
+    
+    Limit authentication attempts per IP address.
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+### 401 Unauthorized
+
+Returned when authentication is required but not provided:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7235#section-3.1",
+  "title": "Unauthorized",
+  "status": 401
+}
+```
+
+### 403 Forbidden
+
+Returned when the user is authenticated but lacks permissions:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.3",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "User does not have the required role: Admin"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customer Endpoints" icon="users" href="/api/endpoints/customers">
+    Explore authenticated customer management endpoints
+  </Card>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Learn more about the API architecture
+  </Card>
+</CardGroup>

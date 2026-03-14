@@ -1,0 +1,680 @@
+---
+title: 'Customer Endpoints'
+description: 'Complete API reference for customer management operations'
+icon: 'users'
+---
+
+## Overview
+
+The Customer endpoints provide full CRUD (Create, Read, Update, Delete) operations for managing customer records in the Vantix Sales system. All endpoints operate on the `Clientes` entity.
+
+## Base Path
+
+```
+/api/customers
+```
+
+## Endpoints
+
+### List All Customers
+
+Retrieve a list of all customers in the system.
+
+```http
+GET /api/customers
+```
+
+#### Query Parameters
+
+<ParamField query="activo" type="boolean" default="true">
+  Filter customers by active status
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="pageSize" type="integer" default="10">
+  Number of records per page (max 100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by name, apellido, or documentoIdentidad
+</ParamField>
+
+#### Response
+
+<ResponseField name="customers" type="array">
+  Array of customer objects
+  
+  <Expandable title="Customer Object">
+    <ResponseField name="clienteId" type="integer" required>
+      Unique customer identifier (Primary Key)
+    </ResponseField>
+    
+    <ResponseField name="nombre" type="string" required>
+      Customer's first name (max 100 characters)
+    </ResponseField>
+    
+    <ResponseField name="apellido" type="string" required>
+      Customer's last name (max 100 characters)
+    </ResponseField>
+    
+    <ResponseField name="documentoIdentidad" type="string" required>
+      Unique identity document number (max 20 characters)
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Customer's email address (max 150 characters)
+    </ResponseField>
+    
+    <ResponseField name="telefono" type="string">
+      Customer's phone number (max 20 characters)
+    </ResponseField>
+    
+    <ResponseField name="fechaRegistro" type="datetime">
+      Registration timestamp (defaults to current date/time)
+    </ResponseField>
+    
+    <ResponseField name="activo" type="boolean">
+      Customer active status (defaults to true)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="totalCount" type="integer">
+  Total number of customers matching the query
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number
+</ResponseField>
+
+<ResponseField name="pageSize" type="integer">
+  Number of records per page
+</ResponseField>
+
+#### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:5001/api/customers?activo=true&page=1&pageSize=10" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('https://localhost:5001/api/customers?activo=true&page=1&pageSize=10', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+console.log(data.customers);
+```
+
+```csharp C#
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+
+var client = new HttpClient();
+client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+var response = await client.GetFromJsonAsync<CustomerListResponse>(
+    "https://localhost:5001/api/customers?activo=true&page=1&pageSize=10");
+```
+
+```python Python
+import requests
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+response = requests.get(
+    'https://localhost:5001/api/customers',
+    params={'activo': True, 'page': 1, 'pageSize': 10},
+    headers=headers
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+#### Example Response
+
+```json 200 OK
+{
+  "customers": [
+    {
+      "clienteId": 1,
+      "nombre": "Juan",
+      "apellido": "Pérez",
+      "documentoIdentidad": "12345678",
+      "email": "juan.perez@example.com",
+      "telefono": "+1234567890",
+      "fechaRegistro": "2026-03-14T10:30:00Z",
+      "activo": true
+    },
+    {
+      "clienteId": 2,
+      "nombre": "María",
+      "apellido": "García",
+      "documentoIdentidad": "87654321",
+      "email": "maria.garcia@example.com",
+      "telefono": "+0987654321",
+      "fechaRegistro": "2026-03-13T15:45:00Z",
+      "activo": true
+    }
+  ],
+  "totalCount": 2,
+  "page": 1,
+  "pageSize": 10
+}
+```
+
+---
+
+### Get Customer by ID
+
+Retrieve a specific customer by their unique identifier.
+
+```http
+GET /api/customers/{id}
+```
+
+#### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique customer ID (ClienteId)
+</ParamField>
+
+#### Response
+
+<ResponseField name="clienteId" type="integer" required>
+  Unique customer identifier
+</ResponseField>
+
+<ResponseField name="nombre" type="string" required>
+  Customer's first name
+</ResponseField>
+
+<ResponseField name="apellido" type="string" required>
+  Customer's last name
+</ResponseField>
+
+<ResponseField name="documentoIdentidad" type="string" required>
+  Unique identity document number
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Customer's email address
+</ResponseField>
+
+<ResponseField name="telefono" type="string">
+  Customer's phone number
+</ResponseField>
+
+<ResponseField name="fechaRegistro" type="datetime">
+  Registration timestamp
+</ResponseField>
+
+<ResponseField name="activo" type="boolean">
+  Customer active status
+</ResponseField>
+
+#### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:5001/api/customers/1" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('https://localhost:5001/api/customers/1', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+const customer = await response.json();
+```
+
+```csharp C#
+var customer = await client.GetFromJsonAsync<Clientes>(
+    "https://localhost:5001/api/customers/1");
+```
+</CodeGroup>
+
+#### Example Response
+
+```json 200 OK
+{
+  "clienteId": 1,
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "documentoIdentidad": "12345678",
+  "email": "juan.perez@example.com",
+  "telefono": "+1234567890",
+  "fechaRegistro": "2026-03-14T10:30:00Z",
+  "activo": true
+}
+```
+
+```json 404 Not Found
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Customer with ID 999 not found"
+}
+```
+
+---
+
+### Create Customer
+
+Create a new customer record.
+
+```http
+POST /api/customers
+```
+
+#### Request Body
+
+<ParamField body="nombre" type="string" required>
+  Customer's first name (max 100 characters)
+</ParamField>
+
+<ParamField body="apellido" type="string" required>
+  Customer's last name (max 100 characters)
+</ParamField>
+
+<ParamField body="documentoIdentidad" type="string" required>
+  Unique identity document number (max 20 characters). Must be unique across all customers.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Customer's email address (max 150 characters). Must be valid email format.
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  Customer's phone number (max 20 characters)
+</ParamField>
+
+<ParamField body="activo" type="boolean" default="true">
+  Customer active status
+</ParamField>
+
+<Note>
+  The `fechaRegistro` field is automatically set to the current date/time and cannot be specified in the request.
+</Note>
+
+<Warning>
+  The `documentoIdentidad` must be unique. Attempting to create a customer with a duplicate DocumentoIdentidad will result in a 409 Conflict error.
+</Warning>
+
+#### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://localhost:5001/api/customers" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Carlos",
+    "apellido": "Rodríguez",
+    "documentoIdentidad": "55667788",
+    "email": "carlos.rodriguez@example.com",
+    "telefono": "+1122334455",
+    "activo": true
+  }'
+```
+
+```javascript JavaScript
+const newCustomer = {
+  nombre: "Carlos",
+  apellido: "Rodríguez",
+  documentoIdentidad: "55667788",
+  email: "carlos.rodriguez@example.com",
+  telefono: "+1122334455",
+  activo: true
+};
+
+const response = await fetch('https://localhost:5001/api/customers', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(newCustomer)
+});
+
+const created = await response.json();
+```
+
+```csharp C#
+var newCustomer = new Clientes
+{
+    Nombre = "Carlos",
+    Apellido = "Rodríguez",
+    DocumentoIdentidad = "55667788",
+    Email = "carlos.rodriguez@example.com",
+    Telefono = "+1122334455",
+    Activo = true
+};
+
+var response = await client.PostAsJsonAsync(
+    "https://localhost:5001/api/customers", newCustomer);
+var created = await response.Content.ReadFromJsonAsync<Clientes>();
+```
+</CodeGroup>
+
+#### Example Response
+
+```json 201 Created
+{
+  "clienteId": 3,
+  "nombre": "Carlos",
+  "apellido": "Rodríguez",
+  "documentoIdentidad": "55667788",
+  "email": "carlos.rodriguez@example.com",
+  "telefono": "+1122334455",
+  "fechaRegistro": "2026-03-14T14:22:30Z",
+  "activo": true
+}
+```
+
+```json 400 Bad Request
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "nombre": ["The Nombre field is required."]
+  }
+}
+```
+
+```json 409 Conflict
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.8",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "A customer with DocumentoIdentidad '55667788' already exists."
+}
+```
+
+---
+
+### Update Customer
+
+Update an existing customer's information.
+
+```http
+PUT /api/customers/{id}
+```
+
+#### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique customer ID to update
+</ParamField>
+
+#### Request Body
+
+<ParamField body="nombre" type="string" required>
+  Customer's first name (max 100 characters)
+</ParamField>
+
+<ParamField body="apellido" type="string" required>
+  Customer's last name (max 100 characters)
+</ParamField>
+
+<ParamField body="documentoIdentidad" type="string" required>
+  Identity document number (max 20 characters). Must be unique.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Customer's email address (max 150 characters)
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  Customer's phone number (max 20 characters)
+</ParamField>
+
+<ParamField body="activo" type="boolean">
+  Customer active status
+</ParamField>
+
+#### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://localhost:5001/api/customers/1" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Juan",
+    "apellido": "Pérez González",
+    "documentoIdentidad": "12345678",
+    "email": "juan.perez.updated@example.com",
+    "telefono": "+1234567890",
+    "activo": true
+  }'
+```
+
+```javascript JavaScript
+const updates = {
+  nombre: "Juan",
+  apellido: "Pérez González",
+  documentoIdentidad: "12345678",
+  email: "juan.perez.updated@example.com",
+  telefono: "+1234567890",
+  activo: true
+};
+
+const response = await fetch('https://localhost:5001/api/customers/1', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(updates)
+});
+```
+
+```csharp C#
+var updates = new Clientes
+{
+    ClienteId = 1,
+    Nombre = "Juan",
+    Apellido = "Pérez González",
+    DocumentoIdentidad = "12345678",
+    Email = "juan.perez.updated@example.com",
+    Telefono = "+1234567890",
+    Activo = true
+};
+
+var response = await client.PutAsJsonAsync(
+    "https://localhost:5001/api/customers/1", updates);
+```
+</CodeGroup>
+
+#### Example Response
+
+```json 200 OK
+{
+  "clienteId": 1,
+  "nombre": "Juan",
+  "apellido": "Pérez González",
+  "documentoIdentidad": "12345678",
+  "email": "juan.perez.updated@example.com",
+  "telefono": "+1234567890",
+  "fechaRegistro": "2026-03-14T10:30:00Z",
+  "activo": true
+}
+```
+
+```json 404 Not Found
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Customer with ID 999 not found"
+}
+```
+
+---
+
+### Delete Customer
+
+Delete a customer from the system.
+
+```http
+DELETE /api/customers/{id}
+```
+
+#### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique customer ID to delete
+</ParamField>
+
+<Warning>
+  This operation permanently deletes the customer record. Consider using a soft delete by setting `activo` to `false` instead.
+</Warning>
+
+#### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://localhost:5001/api/customers/1" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://localhost:5001/api/customers/1', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+```csharp C#
+var response = await client.DeleteAsync(
+    "https://localhost:5001/api/customers/1");
+```
+</CodeGroup>
+
+#### Example Response
+
+```text 204 No Content
+(No response body)
+```
+
+```json 404 Not Found
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Customer with ID 999 not found"
+}
+```
+
+---
+
+## Database Constraints
+
+The Clientes entity has the following database constraints enforced by Entity Framework Core:
+
+<AccordionGroup>
+  <Accordion title="Primary Key">
+    ```csharp VantixDbContext.cs
+    entity.HasKey(e => e.ClienteId).HasName("PK__Clientes__71ABD0872790C1F1");
+    ```
+    
+    The `ClienteId` field is the primary key and is auto-incremented.
+  </Accordion>
+
+  <Accordion title="Unique Constraint">
+    ```csharp VantixDbContext.cs
+    entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A").IsUnique();
+    ```
+    
+    The `DocumentoIdentidad` field must be unique across all customer records.
+  </Accordion>
+
+  <Accordion title="Default Values">
+    ```csharp VantixDbContext.cs
+    entity.Property(e => e.Activo).HasDefaultValue(true);
+    entity.Property(e => e.FechaRegistro)
+        .HasDefaultValueSql("(getdate())");
+    ```
+    
+    - `Activo` defaults to `true`
+    - `FechaRegistro` defaults to current database timestamp
+  </Accordion>
+
+  <Accordion title="String Lengths">
+    ```csharp VantixDbContext.cs
+    entity.Property(e => e.Nombre).HasMaxLength(100);
+    entity.Property(e => e.Apellido).HasMaxLength(100);
+    entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+    entity.Property(e => e.Email).HasMaxLength(150);
+    entity.Property(e => e.Telefono).HasMaxLength(20);
+    ```
+    
+    All string fields have maximum length constraints.
+  </Accordion>
+</AccordionGroup>
+
+## Entity Definition
+
+The complete Clientes entity from the source code:
+
+```csharp Clientes.cs
+namespace Vantix.Domain.Entities.Models;
+
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+
+    public string Nombre { get; set; } = null!;
+
+    public string Apellido { get; set; } = null!;
+
+    public string DocumentoIdentidad { get; set; } = null!;
+
+    public string? Email { get; set; }
+
+    public string? Telefono { get; set; }
+
+    public DateTime? FechaRegistro { get; set; }
+
+    public bool? Activo { get; set; }
+}
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Customer Model" icon="database" href="/api/models/customer">
+    View detailed customer model documentation
+  </Card>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn how to authenticate requests
+  </Card>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Understanding the API architecture
+  </Card>
+</CardGroup>

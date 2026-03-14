@@ -1,0 +1,180 @@
+---
+title: 'Database Configuration'
+description: 'Configure SQL Server connection settings for the Vantix Sales API'
+icon: 'database'
+---
+
+## Overview
+
+The Vantix Sales API uses SQL Server as its database backend with Entity Framework Core 10.0.3 for data access. This guide covers connection string configuration, security best practices, and proper setup.
+
+## Connection String Format
+
+SQL Server connection strings for Vantix follow this pattern:
+
+```text
+Server=SERVER_NAME;Database=DATABASE_NAME;Trusted_Connection=True;TrustServerCertificate=True
+```
+
+### Connection String Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|----------|
+| `Server` | SQL Server instance name | `GARIEN-DESKTOP` or `localhost` |
+| `Database` | Database name | `VantixV1` |
+| `Trusted_Connection` | Use Windows Authentication | `True` |
+| `TrustServerCertificate` | Trust server SSL certificate | `True` |
+
+<Info>
+For SQL Server Authentication, replace `Trusted_Connection=True` with `User Id=username;Password=password`.
+</Info>
+
+## Current Configuration Issue
+
+<Warning>
+**Security Risk: Hardcoded Connection String**
+
+The scaffolded `VantixDbContext.cs` currently contains a hardcoded connection string in the `OnConfiguring` method. This is a security vulnerability and should be moved to configuration files.
+</Warning>
+
+### Problematic Code
+
+From `Vantix.Infrastructure/Persistence/VantixDbContext.cs:21-23`:
+
+```csharp
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code.
+    => optionsBuilder.UseSqlServer("Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;");
+```
+
+## Recommended Configuration
+
+<Steps>
+  <Step title="Add Connection String to appsettings.Development.json">
+    The connection string is already properly configured in the development settings:
+
+    ```json
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "ConnectionStrings": {
+        "ventixDb": "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Remove Hardcoded Connection String">
+    Remove or comment out the `OnConfiguring` method in `VantixDbContext.cs`:
+
+    ```csharp
+    // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    //     => optionsBuilder.UseSqlServer("...");
+    ```
+  </Step>
+
+  <Step title="Configure DbContext in Program.cs">
+    Register the DbContext with dependency injection in `Program.cs`:
+
+    ```csharp
+    using Microsoft.EntityFrameworkCore;
+    using Vantix.Infrastructure.Persistence;
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Add DbContext with connection string from configuration
+    builder.Services.AddDbContext<VantixDbContext>(options =>
+        options.UseSqlServer(
+            builder.Configuration.GetConnectionString("ventixDb")
+        )
+    );
+
+    builder.Services.AddControllers();
+    builder.Services.AddOpenApi();
+
+    var app = builder.Build();
+    ```
+  </Step>
+
+  <Step title="Add Production Configuration">
+    Create environment-specific connection strings in `appsettings.Production.json`:
+
+    ```json
+    {
+      "ConnectionStrings": {
+        "ventixDb": "Server=production-server;Database=VantixV1;User Id=api_user;Password=${DB_PASSWORD}"
+      }
+    }
+    ```
+
+    <Tip>
+    Use environment variables for sensitive values in production: `${DB_PASSWORD}` will be replaced with the `DB_PASSWORD` environment variable.
+    </Tip>
+  </Step>
+</Steps>
+
+## Database Provider
+
+Vantix uses the SQL Server provider for Entity Framework Core:
+
+```xml
+<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Configuration Files" icon="file-code">
+    Store connection strings in `appsettings.json` files, never in source code.
+  </Card>
+  
+  <Card title="Environment Variables" icon="key">
+    Use environment variables for sensitive data like passwords in production.
+  </Card>
+  
+  <Card title="Least Privilege" icon="shield">
+    Create dedicated database users with minimum required permissions.
+  </Card>
+  
+  <Card title="Secure Connections" icon="lock">
+    Use SSL/TLS encryption for database connections in production.
+  </Card>
+</CardGroup>
+
+## Connection String Examples
+
+<CodeGroup>
+```text Windows Authentication
+Server=localhost;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True
+```
+
+```text SQL Server Authentication
+Server=localhost;Database=VantixV1;User Id=vantix_api;Password=SecurePassword123;TrustServerCertificate=True
+```
+
+```text Azure SQL Database
+Server=tcp:vantix-server.database.windows.net,1433;Database=VantixV1;User Id=vantix_admin;Password=SecurePassword123;Encrypt=True;TrustServerCertificate=False
+```
+
+```text Docker SQL Server
+Server=localhost,1433;Database=VantixV1;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True
+```
+</CodeGroup>
+
+## Testing Database Connection
+
+Verify your database connection is working:
+
+```bash
+dotnet ef dbcontext info --project Vantix.Infrastructure
+```
+
+This command will display information about your DbContext and confirm the connection is valid.
+
+<Note>
+If you encounter connection issues, ensure SQL Server is running and the connection string parameters match your database configuration.
+</Note>

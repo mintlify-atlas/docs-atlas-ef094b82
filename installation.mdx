@@ -1,0 +1,476 @@
+---
+title: 'Installation'
+description: 'Comprehensive guide to installing and configuring the Vantix Sales API'
+icon: 'download'
+---
+
+## Overview
+
+This guide provides detailed instructions for installing, configuring, and running the Vantix Sales API. By the end of this guide, you'll have a fully functional development environment.
+
+## System Requirements
+
+### Required Software
+
+<CardGroup cols={2}>
+  <Card title=".NET 10 SDK" icon="microsoft">
+    Latest .NET 10 SDK with runtime support
+    
+    [Download .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)
+  </Card>
+  
+  <Card title="SQL Server" icon="database">
+    SQL Server 2019 or later (Express, Developer, or Enterprise)
+    
+    [Download SQL Server](https://www.microsoft.com/sql-server/sql-server-downloads)
+  </Card>
+  
+  <Card title="Git" icon="git">
+    Version control system for cloning the repository
+    
+    [Download Git](https://git-scm.com/downloads)
+  </Card>
+  
+  <Card title="Code Editor" icon="code">
+    Visual Studio 2022, VS Code, or Rider recommended
+    
+    [Download VS Code](https://code.visualstudio.com/)
+  </Card>
+</CardGroup>
+
+### Optional Tools
+
+- **SQL Server Management Studio (SSMS)** - For database management and queries
+- **Postman** or **Insomnia** - For API testing
+- **Azure Data Studio** - Cross-platform database tool
+
+## Installation Steps
+
+<Steps>
+  <Step title="Verify .NET Installation">
+    First, verify that .NET 10 SDK is properly installed:
+
+    ```bash
+    dotnet --version
+    ```
+
+    You should see output like `10.0.xxx`. If not, download and install the .NET 10 SDK from the link above.
+
+    <Tip>
+      Run `dotnet --info` to see detailed information about your .NET installation, including all installed SDKs and runtimes.
+    </Tip>
+  </Step>
+
+  <Step title="Clone the Repository">
+    Clone the Vantix Sales API repository:
+
+    ```bash
+    git clone <your-repository-url>
+    cd SistemasVentasV2Angular
+    ```
+
+    The project structure should look like this:
+
+    ```
+    SistemasVentasV2Angular/
+    ├── Vantix.Api/              # Web API project
+    ├── Vantix.Application/      # Application layer
+    ├── Vantix.Core/            # Core utilities
+    ├── Vantix.Domain/          # Domain entities
+    ├── Vantix.Infrastructure/  # Data access layer
+    └── scaffold.bat            # Database scaffolding script
+    ```
+  </Step>
+
+  <Step title="Configure SQL Server">
+    Ensure SQL Server is installed and running. You can verify the service status:
+
+    **Windows:**
+    ```powershell
+    Get-Service -Name MSSQL*
+    ```
+
+    **SQL Server Authentication:**
+    
+    The default configuration uses Windows Authentication (Trusted_Connection). To find your server name:
+
+    1. Open SQL Server Management Studio (SSMS)
+    2. The server name is shown in the connection dialog
+    3. Common formats:
+       - `localhost` or `.` for local default instance
+       - `localhost\\SQLEXPRESS` for Express edition
+       - `COMPUTERNAME\\INSTANCENAME` for named instances
+
+    <Warning>
+      Make note of your SQL Server instance name - you'll need it for the connection string configuration.
+    </Warning>
+  </Step>
+
+  <Step title="Create the Database">
+    Create the VantixV1 database. You can use SSMS, Azure Data Studio, or the `sqlcmd` utility:
+
+    ```sql
+    CREATE DATABASE VantixV1;
+    GO
+    ```
+
+    Then create the database schema:
+
+    ```sql
+    USE VantixV1;
+    GO
+
+    -- Create Clientes (Customers) table
+    CREATE TABLE Clientes (
+        ClienteId INT PRIMARY KEY IDENTITY(1,1),
+        Nombre NVARCHAR(100) NOT NULL,
+        Apellido NVARCHAR(100) NOT NULL,
+        DocumentoIdentidad NVARCHAR(20) NOT NULL,
+        Email NVARCHAR(150),
+        Telefono NVARCHAR(20),
+        FechaRegistro DATETIME DEFAULT GETDATE(),
+        Activo BIT DEFAULT 1,
+        CONSTRAINT UQ_DocumentoIdentidad UNIQUE (DocumentoIdentidad)
+    );
+    GO
+    ```
+
+    <Info>
+      The `Clientes` table stores customer information with automatic registration timestamps and active status tracking.
+    </Info>
+  </Step>
+
+  <Step title="Configure Application Settings">
+    Update the connection string in `Vantix.Api/appsettings.Development.json`:
+
+    ```json Vantix.Api/appsettings.Development.json
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "ConnectionStrings": {
+        "ventixDb": "Server=YOUR_SERVER_NAME;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+      },
+      "Jwt": {
+        "Key": "Esta_Es_Una_Llave_Super_Secreta_De_Al_Menos_32_Caracteres_12345!"
+      }
+    }
+    ```
+
+    Replace `YOUR_SERVER_NAME` with your SQL Server instance name from Step 3.
+
+    **Example Connection Strings:**
+
+    ```
+    # Local default instance
+    Server=localhost;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True
+
+    # SQL Server Express
+    Server=localhost\SQLEXPRESS;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True
+
+    # Named instance
+    Server=DESKTOP-ABC123\SQLDEV;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True
+    ```
+
+    <Warning>
+      Never commit sensitive credentials to source control. For production, use environment variables or Azure Key Vault to store connection strings and JWT keys.
+    </Warning>
+  </Step>
+
+  <Step title="Restore NuGet Packages">
+    Navigate to the solution directory and restore all dependencies:
+
+    ```bash
+    dotnet restore
+    ```
+
+    This will restore packages for all projects:
+
+    - **Vantix.Api**: ASP.NET Core OpenAPI (`Microsoft.AspNetCore.OpenApi 10.0.3`)
+    - **Vantix.Infrastructure**: Entity Framework Core packages (`Microsoft.EntityFrameworkCore.SqlServer 10.0.3`)
+    - Other project dependencies
+
+    <Tip>
+      If you encounter restore errors, try clearing the NuGet cache: `dotnet nuget locals all --clear`
+    </Tip>
+  </Step>
+
+  <Step title="Build the Solution">
+    Build all projects to ensure everything compiles correctly:
+
+    ```bash
+    dotnet build
+    ```
+
+    A successful build will show:
+
+    ```
+    Build succeeded.
+        0 Warning(s)
+        0 Error(s)
+    ```
+
+    If you encounter build errors, verify:
+    - All NuGet packages restored successfully
+    - .NET 10 SDK is installed
+    - Project references are intact
+  </Step>
+</Steps>
+
+## Database Context Configuration
+
+The Vantix API uses Entity Framework Core for data access. The `VantixDbContext` is configured in the Infrastructure layer:
+
+```csharp Vantix.Infrastructure/Persistence/VantixDbContext.cs
+public partial class VantixDbContext : DbContext
+{
+    public VantixDbContext()
+    {
+    }
+
+    public VantixDbContext(DbContextOptions<VantixDbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<Clientes> Clientes { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Clientes>(entity =>
+        {
+            entity.HasKey(e => e.ClienteId).HasName("PK__Clientes__71ABD0872790C1F1");
+
+            entity.HasIndex(e => e.DocumentoIdentidad, "UQ__Clientes__049E81A9FF79380A").IsUnique();
+
+            entity.Property(e => e.Activo).HasDefaultValue(true);
+            entity.Property(e => e.Apellido).HasMaxLength(100);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(150);
+            entity.Property(e => e.FechaRegistro)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Nombre).HasMaxLength(100);
+            entity.Property(e => e.Telefono).HasMaxLength(20);
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+```
+
+### Entity Model
+
+The `Clientes` entity represents customer data:
+
+```csharp Vantix.Infrastructure/Entities/Models/Clientes.cs
+public partial class Clientes
+{
+    public int ClienteId { get; set; }
+    public string Nombre { get; set; } = null!;
+    public string Apellido { get; set; } = null!;
+    public string DocumentoIdentidad { get; set; } = null!;
+    public string? Email { get; set; }
+    public string? Telefono { get; set; }
+    public DateTime? FechaRegistro { get; set; }
+    public bool? Activo { get; set; }
+}
+```
+
+## Running the Application
+
+### Development Mode
+
+Run the application in development mode with hot reload:
+
+```bash
+cd Vantix.Api
+dotnet run
+```
+
+Or with hot reload enabled:
+
+```bash
+dotnet watch run
+```
+
+### Application URLs
+
+The application runs on two ports by default (configured in `launchSettings.json`):
+
+```json Vantix.Api/Properties/launchSettings.json
+{
+  "profiles": {
+    "https": {
+      "commandName": "Project",
+      "applicationUrl": "https://localhost:7160;http://localhost:5198",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+```
+
+- **HTTPS**: `https://localhost:7160`
+- **HTTP**: `http://localhost:5198`
+
+<Info>
+  The OpenAPI endpoint is available at `https://localhost:7160/openapi/v1.json` when running in Development mode.
+</Info>
+
+## Database Scaffolding
+
+The project includes a scaffold script to regenerate Entity Framework models from the database:
+
+```batch scaffold.bat
+dotnet ef dbcontext scaffold "Server=GARIEN-DESKTOP;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=true;" Microsoft.EntityFrameworkCore.SqlServer ^
+  --project Vantix.Infrastructure ^
+  --output-dir ../Vantix.Domain/Entities/Models ^
+  --context-dir Persistence ^
+  --context VantixDbContext ^
+  --force ^
+  --no-pluralize ^
+  --namespace Vantix.Domain.Entities.Models ^
+  --context-namespace Vantix.Infrastructure.Persistence
+```
+
+<Warning>
+  Update the connection string in `scaffold.bat` to match your SQL Server instance before running the script.
+</Warning>
+
+## Verifying the Installation
+
+<Steps>
+  <Step title="Check API Health">
+    Verify the API is running by checking the console output:
+
+    ```
+    info: Microsoft.Hosting.Lifetime[14]
+          Now listening on: https://localhost:7160
+    info: Microsoft.Hosting.Lifetime[14]
+          Now listening on: http://localhost:5198
+    info: Microsoft.Hosting.Lifetime[0]
+          Application started. Press Ctrl+C to shut down.
+    ```
+  </Step>
+
+  <Step title="Test OpenAPI Endpoint">
+    Access the OpenAPI specification:
+
+    ```bash
+    curl https://localhost:7160/openapi/v1.json
+    ```
+
+    Or open in your browser: `https://localhost:7160/openapi/v1.json`
+  </Step>
+
+  <Step title="Test Database Connection">
+    Insert sample data to verify database connectivity:
+
+    ```sql
+    USE VantixV1;
+    GO
+
+    INSERT INTO Clientes (Nombre, Apellido, DocumentoIdentidad, Email, Telefono)
+    VALUES 
+        ('Carlos', 'Rodríguez', '11223344', 'carlos.rodriguez@example.com', '555-0200'),
+        ('Ana', 'Martínez', '44332211', 'ana.martinez@example.com', '555-0201'),
+        ('Luis', 'González', '55667788', 'luis.gonzalez@example.com', '555-0202');
+    GO
+
+    -- Verify data
+    SELECT * FROM Clientes;
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot connect to SQL Server">
+    **Symptoms:** `SqlException: A network-related or instance-specific error occurred`
+
+    **Solutions:**
+    - Verify SQL Server service is running
+    - Check the server name in your connection string
+    - Ensure SQL Server is configured to allow remote connections
+    - Test connectivity using SSMS before running the API
+    - For named instances, ensure SQL Server Browser service is running
+  </Accordion>
+
+  <Accordion title="Build errors with .NET 10">
+    **Symptoms:** `error MSB4236: The SDK 'Microsoft.NET.Sdk' specified could not be found`
+
+    **Solutions:**
+    - Verify .NET 10 SDK is installed: `dotnet --list-sdks`
+    - Ensure you have the latest version installed
+    - Restart your terminal/IDE after installing .NET 10
+    - Run `dotnet nuget locals all --clear` to clear caches
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Symptoms:** `System.IO.IOException: Failed to bind to address`
+
+    **Solutions:**
+    - Change the ports in `launchSettings.json`
+    - Kill the process using the port:
+      ```bash
+      # Windows
+      netstat -ano | findstr :7160
+      taskkill /PID <process_id> /F
+      
+      # Linux/Mac
+      lsof -ti:7160 | xargs kill -9
+      ```
+  </Accordion>
+
+  <Accordion title="JWT key validation errors">
+    **Symptoms:** `The key must be at least X characters long`
+
+    **Solutions:**
+    - Ensure the JWT key in `appsettings.Development.json` is at least 32 characters
+    - Use a strong, unique key for production environments
+    - Never use the default key in production
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Explore available API endpoints and learn how to use them
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Set up JWT authentication for secure API access
+  </Card>
+  
+  <Card title="Database Schema" icon="table" href="/configuration/database">
+    Learn about the database structure and relationships
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration/environment">
+    Advanced configuration options and best practices
+  </Card>
+</CardGroup>
+
+## Production Deployment
+
+For production deployment considerations:
+
+<Note>
+  - Use environment variables for sensitive configuration
+  - Enable HTTPS with valid SSL certificates
+  - Configure proper logging and monitoring
+  - Use a production-grade SQL Server instance
+  - Implement proper error handling and security measures
+  - Review the [ASP.NET Core deployment documentation](https://learn.microsoft.com/aspnet/core/host-and-deploy/)
+</Note>

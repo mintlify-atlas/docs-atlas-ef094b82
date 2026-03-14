@@ -1,80 +1,239 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get your Vantix Sales API up and running in minutes'
+icon: 'rocket'
 ---
 
-## Get started in three steps
+<Note>
+  This quickstart guide will help you set up and run the Vantix Sales API locally in under 5 minutes.
+</Note>
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have the following installed:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **.NET 10 SDK** - [Download here](https://dotnet.microsoft.com/download/dotnet/10.0)
+- **SQL Server** - [Download SQL Server Express](https://www.microsoft.com/sql-server/sql-server-downloads)
+- **Git** - [Download here](https://git-scm.com/downloads)
 
-### Step 2: Deploy your changes
+## Quick Setup
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Vantix Sales API repository to your local machine:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    git clone <your-repository-url>
+    cd SistemasVentasV2Angular
+    ```
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Configure Database Connection">
+    Update the connection string in `Vantix.Api/appsettings.Development.json` to match your SQL Server instance:
 
-### Step 3: Go live
+    ```json Vantix.Api/appsettings.Development.json
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "ConnectionStrings": {
+        "ventixDb": "Server=YOUR_SERVER_NAME;Database=VantixV1;Trusted_Connection=True;TrustServerCertificate=True"
+      },
+      "Jwt": {
+        "Key": "Esta_Es_Una_Llave_Super_Secreta_De_Al_Menos_32_Caracteres_12345!"
+      }
+    }
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Warning>
+      Replace `YOUR_SERVER_NAME` with your actual SQL Server instance name (e.g., `localhost`, `DESKTOP-ABC123`, or `.\\SQLEXPRESS`).
+    </Warning>
+  </Step>
 
-## Next steps
+  <Step title="Create the Database">
+    Create the VantixV1 database in SQL Server. You can use SQL Server Management Studio (SSMS) or run this SQL command:
 
-Now that you have your docs running, explore these key features:
+    ```sql
+    CREATE DATABASE VantixV1;
+    ```
+
+    Then create the Clientes table:
+
+    ```sql
+    USE VantixV1;
+    GO
+
+    CREATE TABLE Clientes (
+        ClienteId INT PRIMARY KEY IDENTITY(1,1),
+        Nombre NVARCHAR(100) NOT NULL,
+        Apellido NVARCHAR(100) NOT NULL,
+        DocumentoIdentidad NVARCHAR(20) NOT NULL UNIQUE,
+        Email NVARCHAR(150),
+        Telefono NVARCHAR(20),
+        FechaRegistro DATETIME DEFAULT GETDATE(),
+        Activo BIT DEFAULT 1
+    );
+    ```
+  </Step>
+
+  <Step title="Restore Dependencies">
+    Navigate to the API project directory and restore all NuGet packages:
+
+    ```bash
+    cd Vantix.Api
+    dotnet restore
+    ```
+  </Step>
+
+  <Step title="Run the API">
+    Start the API server:
+
+    ```bash
+    dotnet run
+    ```
+
+    You should see output similar to:
+
+    ```
+    info: Microsoft.Hosting.Lifetime[14]
+          Now listening on: https://localhost:7160
+    info: Microsoft.Hosting.Lifetime[14]
+          Now listening on: http://localhost:5198
+    info: Microsoft.Hosting.Lifetime[0]
+          Application started. Press Ctrl+C to shut down.
+    ```
+  </Step>
+
+  <Step title="Access the OpenAPI Documentation">
+    Open your browser and navigate to the OpenAPI endpoint:
+
+    ```
+    https://localhost:7160/openapi/v1.json
+    ```
+
+    <Tip>
+      The OpenAPI endpoint is only available in Development mode. You can also use tools like Swagger UI or Postman to visualize and test the API endpoints.
+    </Tip>
+  </Step>
+</Steps>
+
+## Test Your Installation
+
+To verify everything is working correctly, let's make a test API call. First, you'll need to add some sample data to your database:
+
+```sql
+USE VantixV1;
+GO
+
+INSERT INTO Clientes (Nombre, Apellido, DocumentoIdentidad, Email, Telefono)
+VALUES 
+    ('Juan', 'Pérez', '12345678', 'juan.perez@example.com', '555-0100'),
+    ('María', 'García', '87654321', 'maria.garcia@example.com', '555-0101');
+```
+
+Now you can test retrieving data through your API endpoints.
+
+## Understanding the Application Architecture
+
+The Vantix Sales API follows a clean architecture pattern with the following projects:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Vantix.Api" icon="server" color="#2563eb">
+    The web API layer that handles HTTP requests and responses. Built with ASP.NET Core and .NET 10.
+  </Card>
+  
+  <Card title="Vantix.Domain" icon="cube" color="#3b82f6">
+    Contains entity models and domain logic. The `Clientes` entity represents customer data.
+  </Card>
+  
+  <Card title="Vantix.Infrastructure" icon="database" color="#1e40af">
+    Handles data persistence with Entity Framework Core and SQL Server integration.
+  </Card>
+  
+  <Card title="Vantix.Application" icon="layer-group" color="#2563eb">
+    Contains business logic and application services.
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Key Configuration Files
+
+### Program.cs
+
+The main entry point configures services and the HTTP pipeline:
+
+```csharp Vantix.Api/Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers();
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+```
+
+### Project Configuration
+
+The API targets .NET 10 with nullable reference types enabled:
+
+```xml Vantix.Api/Vantix.Api.csproj
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+  </ItemGroup>
+</Project>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed installation instructions and troubleshooting
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore available endpoints and their usage
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn how to secure your API with JWT tokens
+  </Card>
+  
+  <Card title="Database Schema" icon="table" href="/configuration/database">
+    Understanding the database structure
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you encounter any issues during setup:
+
+- Check that SQL Server is running and accessible
+- Verify your connection string is correct
+- Ensure .NET 10 SDK is properly installed by running `dotnet --version`
+- Review the console output for any error messages
+
+<Info>
+  The application runs on HTTPS (port 7160) and HTTP (port 5198) by default. You can modify these ports in `Vantix.Api/Properties/launchSettings.json`.
+</Info>
