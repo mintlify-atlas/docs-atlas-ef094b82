@@ -1,0 +1,99 @@
+{
+  "projectType": "api-service",
+  "projectName": "Vantix Sales API",
+  "projectDescription": "A modern sales management REST API built with .NET and Clean Architecture for managing customers, products, and sales transactions.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/clean-architecture",
+              "architecture/project-structure"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/database",
+              "configuration/environment",
+              "configuration/scaffolding"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/endpoints/customers"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/customer"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Development Guide",
+            "pages": [
+              "development/setup",
+              "development/database-migrations",
+              "development/adding-entities"
+            ]
+          },
+          {
+            "group": "Best Practices",
+            "pages": [
+              "development/coding-standards",
+              "development/error-handling"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Clean Architecture implementation with separation of concerns",
+    "Entity Framework Core with SQL Server database-first approach",
+    "OpenAPI/Swagger documentation for all endpoints",
+    "RESTful API design following industry standards",
+    "Database scaffolding automation for rapid development"
+  ],
+  "publicApiSurface": [
+    "VantixDbContext - Database context for accessing entities",
+    "Clientes entity - Customer management model",
+    "WeatherForecastController - Sample API controller",
+    "OpenAPI endpoint - /openapi/v1.json"
+  ]
+}
